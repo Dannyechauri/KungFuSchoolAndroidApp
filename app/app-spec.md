@@ -198,3 +198,33 @@ Rules:
 - Leaderboards / gamification
 - Payments integration
 - Advanced analytics
+
+---
+
+## ✅ Estado actual de la app Android (integrada con KungFuBackendService)
+
+La app ya no usa datos ficticios: consume la API REST de `KungFuBackendService` con sesión por cookie (`JSESSIONID`).
+
+### Configurar el servidor
+- URL por defecto: `http://10.0.2.2:8080` (el `localhost` del PC visto desde el emulador).
+- En un móvil físico, abrir **Servidor** en la pantalla de login e indicar la IP del PC (p. ej. `http://192.168.1.50:8080`).
+- Se permite tráfico HTTP (`usesCleartextTraffic`) para desarrollo; en producción usar HTTPS.
+
+### Navegación implementada
+| Pestaña | Datos del backend | Acciones |
+|---|---|---|
+| Inicio | perfil, grado, próximas clases, asistencias | abrir clase |
+| Clases | `cursos_agendados`, `cursos`, `instructores`, `asistencias_curso`, `inscripciones` | confirmar asistencia (una clase o toda la serie futura), cancelar |
+| Progreso / Temario | `grados`, `formas`, `estilos`, `grado_forma`, `alumno_forma` | solo lectura |
+| Perfil | `alumnos` / `instructores`, `instructor_estilo` | cerrar sesión |
+
+### Endpoints usados
+- `POST /api/auth/login`, `GET /api/auth/me`, `DELETE /api/auth/logout`
+- `GET /api/database/tables/{tabla}/rows?limit=500`
+- `POST` / `DELETE /api/database/tables/asistencias_curso/rows` (única tabla que un usuario no administrador puede modificar)
+
+### Pendiente (no existe aún en el backend)
+- Retos y estiramientos (no hay tablas ni endpoints).
+- Exámenes / temario de examen.
+- Marcar formas aprendidas desde la app (el backend solo permite escribir `alumno_forma` a administradores).
+- Crear/editar cursos desde la app como instructor.

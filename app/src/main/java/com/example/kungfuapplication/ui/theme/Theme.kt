@@ -1,6 +1,5 @@
 package com.example.kungfuapplication.ui.theme
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -11,33 +10,37 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+private val LightColorScheme = lightColorScheme(
+    primary = KungFuRed,
+    onPrimary = androidx.compose.ui.graphics.Color.White,
+    primaryContainer = KungFuRedContainer,
+    onPrimaryContainer = KungFuOnRedContainer,
+    secondary = KungFuGold,
+    onSecondary = androidx.compose.ui.graphics.Color.White,
+    secondaryContainer = KungFuGoldContainer,
+    onSecondaryContainer = KungFuOnGoldContainer,
+    background = Paper,
+    onBackground = Ink,
+    surface = Paper,
+    onSurface = Ink,
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+private val DarkColorScheme = darkColorScheme(
+    primary = KungFuRedLight,
+    onPrimary = KungFuOnRedContainer,
+    primaryContainer = KungFuRedDark,
+    onPrimaryContainer = KungFuRedContainer,
+    secondary = KungFuGoldLight,
+    onSecondary = KungFuOnGoldContainer,
+    secondaryContainer = KungFuGold,
+    onSecondaryContainer = KungFuGoldContainer,
 )
 
 @Composable
 fun KungFuApplicationTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    // Se usan los colores de la escuela por defecto; el color dinámico (Android 12+) es opcional.
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -45,7 +48,6 @@ fun KungFuApplicationTheme(
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
     }

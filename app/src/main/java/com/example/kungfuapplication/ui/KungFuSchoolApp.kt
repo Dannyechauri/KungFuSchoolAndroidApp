@@ -1,507 +1,196 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-
 package com.example.kungfuapplication.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Badge
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SportsMartialArts
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.DividerDefaults
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import com.example.kungfuapplication.ui.theme.KungFuApplicationTheme
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.example.kungfuapplication.data.model.SchoolData
+import com.example.kungfuapplication.ui.classes.ClassDetailScreen
+import com.example.kungfuapplication.ui.classes.ClassesScreen
+import com.example.kungfuapplication.ui.components.ErrorState
+import com.example.kungfuapplication.ui.components.LoadingState
+import com.example.kungfuapplication.ui.home.HomeScreen
+import com.example.kungfuapplication.ui.login.LoginScreen
+import com.example.kungfuapplication.ui.profile.ProfileScreen
+import com.example.kungfuapplication.ui.progress.ProgressScreen
 
-private enum class AppSection(val title: String, val shortLabel: String) {
-    Home("Inicio", "I"),
-    Courses("Cursos", "C"),
-    Progress("Progreso", "P"),
-    Challenges("Retos", "R"),
-    Profile("Perfil", "P")
+private enum class TopLevel(val route: String, val icon: ImageVector) {
+    Home("home", Icons.Filled.Home),
+    Classes("classes", Icons.Filled.CalendarMonth),
+    Progress("progress", Icons.Filled.SportsMartialArts),
+    Profile("profile", Icons.Filled.Person),
 }
 
-private enum class CalendarViewOption(val label: String) {
-    Daily("Diario"),
-    Weekly("Semanal"),
-    Monthly("Mensual"),
-    Yearly("Anual")
-}
+private const val CLASS_DETAIL_ROUTE = "class/{classId}"
 
-private enum class ProgressTab(val label: String) {
-    Forms("Formas"),
-    Stretching("Estiramientos"),
-    Belt("Cinturón / Examen")
+private fun TopLevel.label(data: SchoolData?): String = when (this) {
+    TopLevel.Home -> "Inicio"
+    TopLevel.Classes -> "Clases"
+    TopLevel.Progress -> if (data?.profile?.student != null) "Progreso" else "Temario"
+    TopLevel.Profile -> "Perfil"
 }
 
 @Composable
-fun KungFuSchoolApp() {
-    var selectedSection by rememberSaveable { mutableStateOf(AppSection.Home) }
+fun KungFuSchoolApp(viewModel: AppViewModel = viewModel()) {
+    val session by viewModel.session.collectAsStateWithLifecycle()
+    when (session) {
+        SessionState.Checking -> LoadingState(message = "Comprobando sesión…")
+        SessionState.LoggedOut -> {
+            val loginState by viewModel.login.collectAsStateWithLifecycle()
+            LoginScreen(state = loginState, onLogin = viewModel::login)
+        }
+        is SessionState.LoggedIn -> MainScaffold(viewModel)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MainScaffold(viewModel: AppViewModel) {
+    val state by viewModel.data.collectAsStateWithLifecycle()
+    val navController = rememberNavController()
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
+    val currentTab = TopLevel.entries.firstOrNull { it.route == currentRoute }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+
+    LaunchedEffect(viewModel) {
+        viewModel.messages.collect { snackbarHostState.showSnackbar(it) }
+    }
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             CenterAlignedTopAppBar(
-                title = {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Escuela de Kung Fu")
-                        Text(
-                            text = selectedSection.title,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                title = { Text(currentTab?.label(state.data) ?: "Detalle de la clase") },
+                navigationIcon = {
+                    if (currentTab == null && navController.previousBackStackEntry != null) {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                        }
                     }
-                }
+                },
+                actions = {
+                    IconButton(onClick = viewModel::refresh, enabled = !state.isRefreshing && !state.isLoading) {
+                        Icon(Icons.Filled.Refresh, contentDescription = "Actualizar")
+                    }
+                },
+                scrollBehavior = scrollBehavior,
             )
         },
         bottomBar = {
-            NavigationBar {
-                AppSection.entries.forEach { section ->
-                    NavigationBarItem(
-                        selected = selectedSection == section,
-                        onClick = { selectedSection = section },
-                        icon = {
-                            SectionBadge(section.shortLabel, selectedSection == section)
-                        },
-                        label = { Text(section.title) }
-                    )
+            if (currentTab != null) {
+                NavigationBar {
+                    TopLevel.entries.forEach { tab ->
+                        NavigationBarItem(
+                            selected = tab == currentTab,
+                            onClick = { navController.navigateToTab(tab) },
+                            icon = { Icon(tab.icon, contentDescription = null) },
+                            label = { Text(tab.label(state.data)) },
+                        )
+                    }
                 }
             }
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { innerPadding ->
-        Surface(
-            modifier = Modifier
+        val data = state.data
+        Box(
+            Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(innerPadding),
         ) {
-            when (selectedSection) {
-                AppSection.Home -> HomeScreen()
-                AppSection.Courses -> CoursesScreen()
-                AppSection.Progress -> ProgressScreen()
-                AppSection.Challenges -> ChallengesScreen()
-                AppSection.Profile -> ProfileScreen()
-            }
-        }
-    }
-}
-
-@Composable
-private fun SectionBadge(label: String, selected: Boolean) {
-    Box(
-        modifier = Modifier
-            .size(28.dp)
-            .clip(CircleShape)
-            .background(
-                if (selected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceVariant
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun HomeScreen() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        HeroCard(
-            title = "Sofía Ramírez",
-            subtitle = "Cinturón verde",
-            badge = "Estudiante",
-            progress = 0.64f,
-            progressLabel = "Progreso semanal"
-        )
-        DashboardSection(
-            title = "Próxima clase",
-            description = "Martes, 18:30 • Formas intermedias • Instructor Maestro Chen"
-        )
-        DashboardSection(
-            title = "Reto activo",
-            description = "Racha de estiramientos de 30 días • 18 días completados"
-        )
-        DashboardSection(
-            title = "Notificaciones",
-            description = "El temario de tu examen de cinturón se ha actualizado."
-        )
-        MetricRow(
-            Metric("Clases", "4 esta semana"),
-            Metric("Formas", "7 aprendidas"),
-            Metric("Racha", "12 días")
-        )
-    }
-}
-
-@Composable
-private fun CoursesScreen() {
-    var selectedView by rememberSaveable { mutableStateOf(CalendarViewOption.Weekly) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text("Calendario", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CalendarViewOption.entries.forEach { option ->
-                FilterChip(
-                    selected = selectedView == option,
-                    onClick = { selectedView = option },
-                    label = { Text(option.label) }
-                )
-            }
-        }
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Resumen semanal", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("Vista seleccionada: ${selectedView.label}")
-                HorizontalDivider()
-                TimeSlot("Lun", "19:00", "Estiramientos y bases")
-                TimeSlot("Mié", "18:30", "Formas a mano vacía")
-                TimeSlot("Sáb", "10:00", "Combate / revisión de reto")
-                Button(onClick = { }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Inscribirse en el curso")
+            when {
+                data == null && state.error != null -> ErrorState(state.error!!, onRetry = viewModel::refresh)
+                data == null -> LoadingState(message = "Cargando datos de la escuela…")
+                else -> PullToRefreshBox(
+                    isRefreshing = state.isRefreshing,
+                    onRefresh = viewModel::refresh,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    AppNavHost(navController, data, state.pendingClassIds, viewModel)
                 }
             }
         }
-        InstructorModeCard()
     }
 }
 
 @Composable
-private fun ProgressScreen() {
-    var selectedTab by rememberSaveable { mutableStateOf(ProgressTab.Forms) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        TabRow(selectedTabIndex = selectedTab.ordinal) {
-            ProgressTab.entries.forEach { tab ->
-                Tab(
-                    selected = selectedTab == tab,
-                    onClick = { selectedTab = tab },
-                    text = { Text(tab.label) }
-                )
-            }
-        }
-
-        when (selectedTab) {
-            ProgressTab.Forms -> FormsSection()
-            ProgressTab.Stretching -> StretchingSection()
-            ProgressTab.Belt -> BeltExamSection()
-        }
-    }
-}
-
-@Composable
-private fun ChallengesScreen() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text("Retos activos", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        ChallengeCard(
-            title = "Estiramiento de 30 días",
-            status = "Activo",
-            progress = "18/30 días",
-            actionLabel = "Continuar"
-        )
-        ChallengeCard(
-            title = "Dominio de formas",
-            status = "Disponible",
-            progress = "Se desbloquea tras cinturón verde",
-            actionLabel = "Unirse"
-        )
-        ChallengeCard(
-            title = "Ejercicios de combate",
-            status = "Guiado por instructor",
-            progress = "Comienza el próximo mes",
-            actionLabel = "Ver detalles"
-        )
-    }
-}
-
-@Composable
-private fun ProfileScreen() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        HeroCard(
-            title = "Sofia Ramirez",
-            subtitle = "Estudiante • 15 años",
-            badge = "Cinturón verde",
-            progress = 0.74f,
-            progressLabel = "Perfil completado"
-        )
-        MetricRow(
-            Metric("Clases", "42"),
-            Metric("Formas", "7"),
-            Metric("Exámenes", "2 aprobados")
-        )
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Cuenta", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("Edita tu perfil, datos del cinturón e información de contacto.")
-                TextButton(onClick = { }) { Text("Editar perfil") }
-            }
-        }
-    }
-}
-
-@Composable
-private fun HeroCard(
-    title: String,
-    subtitle: String,
-    badge: String,
-    progress: Float,
-    progressLabel: String
+private fun AppNavHost(
+    navController: NavHostController,
+    data: SchoolData,
+    pendingClassIds: Set<Long>,
+    viewModel: AppViewModel,
 ) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("KF", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Badge { Text(badge) }
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(progressLabel, style = MaterialTheme.typography.labelLarge)
-                    Text("${(progress * 100).toInt()}%")
-                }
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+    val openClass: (Long) -> Unit = { navController.navigate("class/$it") }
+    NavHost(navController = navController, startDestination = TopLevel.Home.route) {
+        composable(TopLevel.Home.route) {
+            HomeScreen(
+                data = data,
+                onOpenClass = openClass,
+                onOpenCalendar = { navController.navigateToTab(TopLevel.Classes) },
+                onOpenProgress = { navController.navigateToTab(TopLevel.Progress) },
+            )
+        }
+        composable(TopLevel.Classes.route) { ClassesScreen(data, onOpenClass = openClass) }
+        composable(TopLevel.Progress.route) { ProgressScreen(data) }
+        composable(TopLevel.Profile.route) {
+            ProfileScreen(data, baseUrl = viewModel.baseUrl, onLogout = viewModel::logout)
+        }
+        composable(
+            CLASS_DETAIL_ROUTE,
+            arguments = listOf(navArgument("classId") { type = NavType.LongType }),
+        ) { entry ->
+            ClassDetailScreen(
+                data = data,
+                classId = entry.arguments?.getLong("classId") ?: -1L,
+                pendingClassIds = pendingClassIds,
+                onConfirm = viewModel::confirmAttendance,
+                onCancel = viewModel::cancelAttendance,
+            )
         }
     }
 }
 
-@Composable
-private fun DashboardSection(title: String, description: String) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-@Composable
-private fun MetricRow(vararg metrics: Metric) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-        metrics.forEach { metric ->
-            OutlinedCard(modifier = Modifier.weight(1f)) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(metric.value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(metric.label, style = MaterialTheme.typography.labelMedium)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TimeSlot(day: String, time: String, title: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column {
-            Text(day, fontWeight = FontWeight.SemiBold)
-            Text(time, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Text(title, modifier = Modifier.weight(1f).padding(start = 16.dp))
-    }
-}
-
-@Composable
-private fun InstructorModeCard() {
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Instructor mode", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text("Crea, edita y programa cursos desde aquí.")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AssistChip(onClick = { }, label = { Text("Crear curso") })
-                AssistChip(onClick = { }, label = { Text("Editar horario") })
-            }
-        }
-    }
-}
-
-@Composable
-private fun FormsSection() {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        FormGroup("Mano vacía", "Postura del tigre", "Barrido del dragón", "Flujo de la grulla")
-        FormGroup("Estilo", "Bases del norte", "Serie interna")
-        FormGroup("Armas", "Forma de bastón", "Forma de lanza", "Forma de espada")
-    }
-}
-
-@Composable
-private fun FormGroup(title: String, vararg items: String) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                items.forEachIndexed { index, item ->
-                    AssistChip(
-                        onClick = { },
-                        label = { Text(item) }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun StretchingSection() {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        StretchCard("Frontal", 0.8f, "5/6 sesiones")
-        StretchCard("Lateral", 0.55f, "3/6 sesiones")
-        StretchCard("Hombros", 0.72f, "4/6 sesiones")
-        StretchCard("Espalda", 0.4f, "2/6 sesiones")
-    }
-}
-
-@Composable
-private fun StretchCard(title: String, progress: Float, detail: String) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(title, fontWeight = FontWeight.SemiBold)
-                Text(detail, style = MaterialTheme.typography.labelMedium)
-            }
-            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-        }
-    }
-}
-
-@Composable
-private fun BeltExamSection() {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Cinturón actual", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("Cinturón verde", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Formas desbloqueadas: 7")
-            }
-        }
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Temario del examen", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("Formas • Sansao • Combate (18-30) • Aplicaciones de formas")
-                HorizontalDivider(color = DividerDefaults.color)
-                Text("Observaciones del instructor", fontWeight = FontWeight.SemiBold)
-                Text("Necesita constancia en los estiramientos semanales.")
-            }
-        }
-    }
-}
-
-@Composable
-private fun ChallengeCard(title: String, status: String, progress: String, actionLabel: String) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(status, color = MaterialTheme.colorScheme.primary)
-            }
-            Text(progress, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(onClick = { }) {
-                Text(actionLabel)
-            }
-        }
-    }
-}
-
-private data class Metric(val label: String, val value: String)
-
-@Preview(showBackground = true)
-@Composable
-private fun KungFuSchoolAppPreview() {
-    KungFuApplicationTheme {
-        KungFuSchoolApp()
+private fun NavHostController.navigateToTab(tab: TopLevel) {
+    navigate(tab.route) {
+        popUpTo(graph.findStartDestination().id) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
     }
 }
