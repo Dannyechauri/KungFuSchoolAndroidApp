@@ -12,210 +12,189 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.EventAvailable
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.SportsMartialArts
 import androidx.compose.material.icons.filled.EventBusy
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.kungfuapplication.data.model.ClassItem
-import com.example.kungfuapplication.data.model.PersonType
-import com.example.kungfuapplication.data.model.SchoolData
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.kungfuapplication.data.model.CalendarEvent
+import com.example.kungfuapplication.data.model.MyProfile
+import com.example.kungfuapplication.data.model.SessionUser
+import com.example.kungfuapplication.ui.AppViewModel
 import com.example.kungfuapplication.ui.components.BeltChip
-import com.example.kungfuapplication.ui.components.ClassListItem
 import com.example.kungfuapplication.ui.components.EmptyState
+import com.example.kungfuapplication.ui.components.ErrorState
+import com.example.kungfuapplication.ui.components.EventCard
 import com.example.kungfuapplication.ui.components.InitialsAvatar
+import com.example.kungfuapplication.ui.components.LoadingState
 import com.example.kungfuapplication.ui.components.SectionHeader
 import com.example.kungfuapplication.ui.components.StatCard
-import com.example.kungfuapplication.ui.components.formatTime
 import com.example.kungfuapplication.ui.components.relativeLabel
-import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.temporal.TemporalAdjusters
+import com.example.kungfuapplication.ui.schoolNow
+import com.example.kungfuapplication.ui.schoolToday
+
+private const val MAX_ITEMS = 4
 
 @Composable
 fun HomeScreen(
-    data: SchoolData,
-    onOpenClass: (Long) -> Unit,
+    user: SessionUser,
+    viewModel: AppViewModel,
+    onOpenEvent: (Long) -> Unit,
     onOpenCalendar: () -> Unit,
-    onOpenProgress: () -> Unit,
+    onOpenProfile: () -> Unit,
 ) {
-    val now = remember(data) { LocalDateTime.now() }
-    val myUpcoming = remember(data) { data.myUpcomingClasses(now) }
-    val schoolUpcoming = remember(data) { data.upcomingClasses(now).filterNot { it.isMine }.take(5) }
+    val calendar by viewModel.calendar.collectAsStateWithLifecycle()
+    val profileState by viewModel.profile.collectAsStateWithLifecycle()
+
+    if (!calendar.loaded) {
+        if (calendar.error != null) ErrorState(calendar.error!!, onRetry = viewModel::refresh)
+        else LoadingState(message = "Cargando la agenda…")
+        return
+    }
+
+    val now = schoolNow()
+    val today = schoolToday()
+    val upcoming = calendar.upcoming.filter { it.active && it.end.isAfter(now) }
+    val mine = upcoming.filter { it.myParticipation != null }
+    val school = upcoming.filter { it.myParticipation == null }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { WelcomeCard(data, onOpenProgress) }
-        item { StatsRow(data, now, myUpcoming.size) }
+        item { GreetingCard(user, profileState.profile, onOpenProfile) }
 
-        item { SectionHeader("Tu próxima clase") }
-        item {
-            val next = myUpcoming.firstOrNull()
-            if (next != null) {
-                NextClassCard(next, onClick = { onOpenClass(next.scheduled.id) })
-            } else {
-                ElevatedCard(Modifier.fillMaxWidth()) {
-                    EmptyState(
-                        icon = Icons.Filled.EventBusy,
-                        title = "Sin clases confirmadas",
-                        message = "Consulta el calendario y confirma tu asistencia a una clase.",
-                        action = { FilledTonalButton(onClick = onOpenCalendar) { Text("Ver calendario") } },
-                    )
+        if (user.isAdmin) {
+            item {
+                val todayCount = upcoming.count { it.start.toLocalDate() == today }
+                val weekCount = upcoming.count { it.start.toLocalDate().isBefore(today.plusDays(7)) }
+                val fullCount = upcoming.count { it.full }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatCard(Icons.Filled.Today, todayCount.toString(), "Hoy", Modifier.weight(1f))
+                    StatCard(Icons.Filled.EventAvailable, weekCount.toString(), "7 días", Modifier.weight(1f))
+                    StatCard(Icons.Filled.EventBusy, fullCount.toString(), "Completas", Modifier.weight(1f))
                 }
             }
         }
 
-        if (myUpcoming.size > 1) {
-            item { SectionHeader("También tienes") }
-            items(myUpcoming.drop(1).take(3), key = { "mine-${it.scheduled.id}" }) { item ->
-                ClassListItem(item, onClick = { onOpenClass(item.scheduled.id) })
+        if (user.canParticipate) {
+            item { SectionHeader("Mis próximas actividades") }
+            if (mine.isEmpty()) {
+                item { NoParticipationCard(onOpenCalendar) }
+            } else {
+                dayGroupedItems(mine.take(MAX_ITEMS), today, onOpenEvent)
             }
         }
 
         item {
-            SectionHeader("Próximas clases en la escuela") {
-                TextButton(onClick = onOpenCalendar) { Text("Ver todas") }
+            SectionHeader("Próximas actividades de la escuela") {
+                TextButton(onClick = onOpenCalendar) { Text("Ver todo") }
             }
         }
-        if (schoolUpcoming.isEmpty()) {
+        if (school.isEmpty()) {
             item {
-                Text(
-                    "No hay más clases programadas.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 8.dp),
+                EmptyState(
+                    icon = Icons.Filled.Groups,
+                    title = "Sin actividades",
+                    message = "No hay actividades programadas en los próximos días.",
                 )
             }
         } else {
-            items(schoolUpcoming, key = { "school-${it.scheduled.id}" }) { item ->
-                ClassListItem(item, onClick = { onOpenClass(item.scheduled.id) })
-            }
+            dayGroupedItems(school.take(if (user.isAdmin) MAX_ITEMS * 2 else MAX_ITEMS), today, onOpenEvent)
+        }
+    }
+}
+
+private fun androidx.compose.foundation.lazy.LazyListScope.dayGroupedItems(
+    events: List<CalendarEvent>,
+    today: java.time.LocalDate,
+    onOpenEvent: (Long) -> Unit,
+) {
+    events.groupBy { it.start.toLocalDate() }.forEach { (date, dayEvents) ->
+        item(key = "day-$date-${dayEvents.first().id}") {
+            Text(
+                date.relativeLabel(today),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        items(dayEvents, key = { "home-${it.id}" }) { event ->
+            EventCard(event = event, onClick = { onOpenEvent(event.id) })
         }
     }
 }
 
 @Composable
-private fun WelcomeCard(data: SchoolData, onOpenProgress: () -> Unit) {
-    val profile = data.profile
-    val firstName = profile.displayName.trim().substringBefore(' ')
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        ),
-    ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+private fun GreetingCard(user: SessionUser, profile: MyProfile?, onOpenProfile: () -> Unit) {
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                InitialsAvatar(profile.displayName)
+                InitialsAvatar(user.displayName)
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Hola, $firstName", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(
-                        buildString {
-                            append(profile.personType.label)
-                            if (profile.personType == PersonType.STUDENT && profile.instructor != null) append(" · Instructor")
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    Text("Hola, ${user.displayName.substringBefore(' ')}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(user.roleLabel, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (profile.personType == PersonType.STUDENT) {
-                    BeltChip(data.currentGrade)
-                }
+                if (profile?.grade != null) BeltChip(profile.grade.name, profile.grade.beltColor)
             }
-            data.nextGradeProgress?.let { progress ->
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            if (profile != null) {
+                val required = profile.requiredForms.size
+                val known = profile.knownRequiredCount
+                if (required > 0) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            "Hacia ${progress.nextGrade.name}",
-                            style = MaterialTheme.typography.labelLarge,
-                            modifier = Modifier.weight(1f),
+                            "$known de $required formas obligatorias de tu grado",
+                            style = MaterialTheme.typography.bodyMedium,
                         )
-                        Text("${progress.learned}/${progress.total} formas", style = MaterialTheme.typography.labelLarge)
-                    }
-                    LinearProgressIndicator(progress = { progress.fraction }, modifier = Modifier.fillMaxWidth())
-                    TextButton(onClick = onOpenProgress, contentPadding = PaddingValues(0.dp)) {
-                        Text("Ver mi progreso")
-                        Spacer(Modifier.width(4.dp))
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+                        LinearProgressIndicator(progress = { known / required.toFloat() }, modifier = Modifier.fillMaxWidth())
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatsRow(data: SchoolData, now: LocalDateTime, myUpcomingCount: Int) {
-    val weekEnd = LocalDate.now().with(TemporalAdjusters.nextOrSame(java.time.DayOfWeek.SUNDAY))
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-        when (data.profile.personType) {
-            PersonType.STUDENT -> {
-                StatCard(Icons.Filled.EventAvailable, myUpcomingCount.toString(), "Próximas", Modifier.weight(1f))
-                StatCard(Icons.Filled.History, data.attendedClassesCount(now).toString(), "Asistidas", Modifier.weight(1f))
-                StatCard(Icons.Filled.SportsMartialArts, data.myLearnedForms.size.toString(), "Formas", Modifier.weight(1f))
-            }
-            PersonType.INSTRUCTOR -> {
-                val teaching = data.upcomingClasses(now).count { it.teaching }
-                val thisWeek = data.upcomingClasses(now).count { it.scheduled.dateTime!!.toLocalDate() <= weekEnd }
-                StatCard(Icons.Filled.School, teaching.toString(), "Impartes", Modifier.weight(1f))
-                StatCard(Icons.Filled.CalendarMonth, thisWeek.toString(), "Esta semana", Modifier.weight(1f))
-                StatCard(Icons.Filled.Groups, data.students.count { it.active }.toString(), "Alumnos", Modifier.weight(1f))
-            }
-            PersonType.ADMIN -> {
-                StatCard(Icons.Filled.CalendarMonth, data.upcomingClasses(now).size.toString(), "Clases", Modifier.weight(1f))
-                StatCard(Icons.Filled.Groups, data.students.count { it.active }.toString(), "Alumnos", Modifier.weight(1f))
-                StatCard(Icons.Filled.School, data.instructors.count { it.active }.toString(), "Instructores", Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun NextClassCard(item: ClassItem, onClick: () -> Unit) {
-    val dateTime = item.scheduled.dateTime
-    ElevatedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val learning = profile.learningCount
+                    Text(
+                        if (learning == 0) "No estás aprendiendo ninguna forma" else "Aprendiendo $learning ${if (learning == 1) "forma" else "formas"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onOpenProfile) { Text("Ver mi ficha") }
+                }
+            } else if (user.isAdmin) {
                 Text(
-                    dateTime?.let { "${it.toLocalDate().relativeLabel()} · ${it.formatTime()}" } ?: "Sin fecha",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
+                    "Alumnos, cursos, grados y formas se gestionan desde la web. Aquí puedes revisar y gestionar la agenda.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(item.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            item.course?.topic?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-            Text(
-                buildString {
-                    append(if (item.teaching) "Impartes esta clase" else item.instructor?.name?.let { "Instructor: $it" } ?: "Instructor por asignar")
-                    append(" · ${item.attendees.size} asistente(s)")
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        }
+    }
+}
+
+@Composable
+private fun NoParticipationCard(onOpenCalendar: () -> Unit) {
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.EventAvailable, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("No estás apuntado a nada", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Text("Abre una actividad y pulsa «Apuntarme».", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            TextButton(onClick = onOpenCalendar) { Text("Calendario") }
         }
     }
 }

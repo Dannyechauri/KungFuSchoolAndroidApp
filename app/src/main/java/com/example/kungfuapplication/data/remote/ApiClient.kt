@@ -23,7 +23,7 @@ class ApiException(val status: Int, message: String) : Exception(message) {
 }
 
 /**
- * Cliente HTTP para el backend Spring Boot (KungFuBackendService).
+ * Cliente HTTP para el backend Node.js/Fastify (KungFuBackendService).
  * La autenticación se basa en la cookie de sesión que devuelve /api/auth/login.
  */
 class ApiClient(
@@ -43,23 +43,19 @@ class ApiClient(
 
     suspend fun get(path: String): JsonElement = execute("GET", path, null)
 
-    suspend fun post(path: String, body: JsonObject): JsonElement = execute("POST", path, body)
+    suspend fun getArray(path: String): List<JsonObject> = get(path).jsonArray.mapNotNull { it as? JsonObject }
+
+    suspend fun post(path: String, body: JsonObject = JsonObject(emptyMap())): JsonElement = execute("POST", path, body)
+
+    suspend fun put(path: String, body: JsonObject): JsonElement = execute("PUT", path, body)
+
+    suspend fun patch(path: String, body: JsonObject): JsonElement = execute("PATCH", path, body)
 
     suspend fun delete(path: String): JsonElement = execute("DELETE", path, null)
 
-    suspend fun tableRows(table: String, limit: Int = MAX_ROWS): List<JsonObject> {
-        return get("/api/database/tables/${encode(table)}/rows?limit=$limit").jsonArray.map { it.jsonObject }
-    }
-
-    suspend fun insertRow(table: String, payload: JsonObject): JsonObject {
-        return post("/api/database/tables/${encode(table)}/rows", payload).jsonObject
-    }
-
-    suspend fun deleteRow(table: String, id: String) {
-        delete("/api/database/tables/${encode(table)}/rows/${encode(id)}")
-    }
-
     fun clearSession() = cookieJar.clear()
+
+    fun encode(value: String): String = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 
     private suspend fun execute(method: String, path: String, body: JsonObject?): JsonElement =
         withContext(Dispatchers.IO) {
@@ -102,12 +98,5 @@ class ApiClient(
             in 500..599 -> "Error interno del servidor ($status)."
             else -> "Error HTTP $status"
         }
-    }
-
-    private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
-
-    companion object {
-        // El backend limita cada consulta a 500 filas.
-        const val MAX_ROWS = 500
     }
 }

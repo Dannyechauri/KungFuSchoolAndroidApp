@@ -5,13 +5,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.SportsMartialArts
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
@@ -20,7 +23,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -28,7 +30,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -39,65 +40,89 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.kungfuapplication.data.model.SchoolData
-import com.example.kungfuapplication.ui.classes.ClassDetailScreen
-import com.example.kungfuapplication.ui.classes.ClassesScreen
-import com.example.kungfuapplication.ui.components.ErrorState
+import com.example.kungfuapplication.data.model.SessionUser
+import com.example.kungfuapplication.ui.account.AccountScreen
+import com.example.kungfuapplication.ui.calendar.CalendarScreen
+import com.example.kungfuapplication.ui.calendar.EventDetailScreen
+import com.example.kungfuapplication.ui.calendar.ManageScreen
+import com.example.kungfuapplication.ui.calendar.ScheduleFormScreen
+import com.example.kungfuapplication.ui.calendar.ScheduleTarget
 import com.example.kungfuapplication.ui.components.LoadingState
 import com.example.kungfuapplication.ui.home.HomeScreen
 import com.example.kungfuapplication.ui.login.LoginScreen
-import com.example.kungfuapplication.ui.profile.ProfileScreen
-import com.example.kungfuapplication.ui.progress.ProgressScreen
+import com.example.kungfuapplication.ui.profile.MyProfileScreen
+import java.time.LocalDate
 
-private enum class TopLevel(val route: String, val icon: ImageVector) {
-    Home("home", Icons.Filled.Home),
-    Classes("classes", Icons.Filled.CalendarMonth),
-    Progress("progress", Icons.Filled.SportsMartialArts),
-    Profile("profile", Icons.Filled.Person),
+private enum class Tab(val route: String, val label: String, val title: String, val icon: ImageVector) {
+    Home("home", "Inicio", "Escuela de Kung Fu", Icons.Filled.Home),
+    Profile("profile", "Mi ficha", "Mi ficha", Icons.Filled.Badge),
+    Calendar("calendar", "Calendario", "Calendario", Icons.Filled.CalendarMonth),
+    Manage("manage", "Agenda", "Gestionar agenda", Icons.Filled.EditCalendar),
+    Account("account", "Cuenta", "Mi cuenta", Icons.Filled.AccountCircle),
 }
 
-private const val CLASS_DETAIL_ROUTE = "class/{classId}"
+/** Mismo orden que el menú de la web: Mi ficha va encima de Calendario. */
+private fun tabsFor(user: SessionUser): List<Tab> = buildList {
+    add(Tab.Home)
+    if (user.hasProfile) add(Tab.Profile)
+    add(Tab.Calendar)
+    if (user.canManageCalendar) add(Tab.Manage)
+    add(Tab.Account)
+}
 
-private fun TopLevel.label(data: SchoolData?): String = when (this) {
-    TopLevel.Home -> "Inicio"
-    TopLevel.Classes -> "Clases"
-    TopLevel.Progress -> if (data?.profile?.student != null) "Progreso" else "Temario"
-    TopLevel.Profile -> "Perfil"
+private const val EVENT_ROUTE = "event/{eventId}"
+private const val SCHEDULE_ROUTE = "schedule/{kind}?id={id}&date={date}"
+
+private fun NavHostController.openEvent(id: Long) = navigate("event/$id")
+
+private fun NavHostController.openSchedule(kind: String, id: Long? = null, date: LocalDate? = null) {
+    navigate("schedule/$kind?id=${id ?: -1}&date=${date?.toString().orEmpty()}")
 }
 
 @Composable
 fun KungFuSchoolApp(viewModel: AppViewModel = viewModel()) {
     val session by viewModel.session.collectAsStateWithLifecycle()
-    when (session) {
+    when (val current = session) {
         SessionState.Checking -> LoadingState(message = "Comprobando sesión…")
         SessionState.LoggedOut -> {
             val loginState by viewModel.login.collectAsStateWithLifecycle()
             LoginScreen(state = loginState, onLogin = viewModel::login)
         }
-        is SessionState.LoggedIn -> MainScaffold(viewModel)
+        is SessionState.LoggedIn -> MainScaffold(viewModel, current.user)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MainScaffold(viewModel: AppViewModel) {
-    val state by viewModel.data.collectAsStateWithLifecycle()
+private fun MainScaffold(viewModel: AppViewModel, user: SessionUser) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val currentTab = TopLevel.entries.firstOrNull { it.route == currentRoute }
+    val tabs = remember(user) { tabsFor(user) }
+    val currentTab = tabs.firstOrNull { it.route == currentRoute }
     val snackbarHostState = remember { SnackbarHostState() }
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+    val calendar by viewModel.calendar.collectAsStateWithLifecycle()
 
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { snackbarHostState.showSnackbar(it) }
     }
 
+    val title = currentTab?.title ?: when (currentRoute) {
+        EVENT_ROUTE -> "Actividad"
+        SCHEDULE_ROUTE -> when (backStackEntry?.arguments?.getString("kind")) {
+            ScheduleTarget.EVENT_EDIT -> "Editar sesión"
+            ScheduleTarget.RULE_EDIT -> "Editar horario habitual"
+            ScheduleTarget.RULE_NEW -> "Nuevo horario habitual"
+            else -> "Programar actividad"
+        }
+        else -> ""
+    }
+
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(currentTab?.label(state.data) ?: "Detalle de la clase") },
+                title = { Text(title) },
                 navigationIcon = {
                     if (currentTab == null && navController.previousBackStackEntry != null) {
                         IconButton(onClick = { navController.popBackStack() }) {
@@ -106,88 +131,133 @@ private fun MainScaffold(viewModel: AppViewModel) {
                     }
                 },
                 actions = {
-                    IconButton(onClick = viewModel::refresh, enabled = !state.isRefreshing && !state.isLoading) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Actualizar")
+                    if (currentTab != null && currentTab != Tab.Account) {
+                        IconButton(onClick = viewModel::refresh, enabled = !isRefreshing) {
+                            Icon(Icons.Filled.Refresh, contentDescription = "Actualizar")
+                        }
                     }
                 },
-                scrollBehavior = scrollBehavior,
             )
         },
         bottomBar = {
             if (currentTab != null) {
                 NavigationBar {
-                    TopLevel.entries.forEach { tab ->
+                    tabs.forEach { tab ->
                         NavigationBarItem(
                             selected = tab == currentTab,
                             onClick = { navController.navigateToTab(tab) },
                             icon = { Icon(tab.icon, contentDescription = null) },
-                            label = { Text(tab.label(state.data)) },
+                            label = { Text(tab.label, maxLines = 1) },
                         )
                     }
                 }
             }
         },
+        floatingActionButton = {
+            if (currentTab == Tab.Calendar && user.canManageCalendar) {
+                ExtendedFloatingActionButton(
+                    onClick = { navController.openSchedule(ScheduleTarget.EVENT_NEW, date = calendar.selectedDate) },
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    text = { Text("Sesión") },
+                )
+            }
+        },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { innerPadding ->
-        val data = state.data
         Box(
             Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-            when {
-                data == null && state.error != null -> ErrorState(state.error!!, onRetry = viewModel::refresh)
-                data == null -> LoadingState(message = "Cargando datos de la escuela…")
-                else -> PullToRefreshBox(
-                    isRefreshing = state.isRefreshing,
-                    onRefresh = viewModel::refresh,
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    AppNavHost(navController, data, state.pendingClassIds, viewModel)
-                }
-            }
+            AppNavHost(navController, user, viewModel, isRefreshing)
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun Refreshable(isRefreshing: Boolean, onRefresh: () -> Unit, content: @Composable () -> Unit) {
+    PullToRefreshBox(isRefreshing = isRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+        content()
     }
 }
 
 @Composable
 private fun AppNavHost(
     navController: NavHostController,
-    data: SchoolData,
-    pendingClassIds: Set<Long>,
+    user: SessionUser,
     viewModel: AppViewModel,
+    isRefreshing: Boolean,
 ) {
-    val openClass: (Long) -> Unit = { navController.navigate("class/$it") }
-    NavHost(navController = navController, startDestination = TopLevel.Home.route) {
-        composable(TopLevel.Home.route) {
-            HomeScreen(
-                data = data,
-                onOpenClass = openClass,
-                onOpenCalendar = { navController.navigateToTab(TopLevel.Classes) },
-                onOpenProgress = { navController.navigateToTab(TopLevel.Progress) },
+    NavHost(navController = navController, startDestination = Tab.Home.route) {
+        composable(Tab.Home.route) {
+            Refreshable(isRefreshing, viewModel::refresh) {
+                HomeScreen(
+                    user = user,
+                    viewModel = viewModel,
+                    onOpenEvent = navController::openEvent,
+                    onOpenCalendar = { navController.navigateToTab(Tab.Calendar) },
+                    onOpenProfile = { navController.navigateToTab(Tab.Profile) },
+                )
+            }
+        }
+        composable(Tab.Profile.route) {
+            Refreshable(isRefreshing, viewModel::refresh) { MyProfileScreen(viewModel) }
+        }
+        composable(Tab.Calendar.route) {
+            Refreshable(isRefreshing, viewModel::refresh) {
+                CalendarScreen(viewModel = viewModel, onOpenEvent = navController::openEvent)
+            }
+        }
+        composable(Tab.Manage.route) {
+            Refreshable(isRefreshing, viewModel::refresh) {
+                ManageScreen(
+                    user = user,
+                    viewModel = viewModel,
+                    onNewEvent = { navController.openSchedule(ScheduleTarget.EVENT_NEW, date = schoolToday()) },
+                    onNewRule = { navController.openSchedule(ScheduleTarget.RULE_NEW, date = schoolToday()) },
+                    onEditRule = { navController.openSchedule(ScheduleTarget.RULE_EDIT, id = it) },
+                    onOpenEvent = navController::openEvent,
+                )
+            }
+        }
+        composable(Tab.Account.route) {
+            AccountScreen(user = user, baseUrl = viewModel.baseUrl, onLogout = viewModel::logout)
+        }
+        composable(EVENT_ROUTE, arguments = listOf(navArgument("eventId") { type = NavType.LongType })) { entry ->
+            EventDetailScreen(
+                eventId = entry.arguments?.getLong("eventId") ?: -1L,
+                user = user,
+                viewModel = viewModel,
+                onEditEvent = { navController.openSchedule(ScheduleTarget.EVENT_EDIT, id = it) },
+                onEditRule = { navController.openSchedule(ScheduleTarget.RULE_EDIT, id = it) },
             )
         }
-        composable(TopLevel.Classes.route) { ClassesScreen(data, onOpenClass = openClass) }
-        composable(TopLevel.Progress.route) { ProgressScreen(data) }
-        composable(TopLevel.Profile.route) {
-            ProfileScreen(data, baseUrl = viewModel.baseUrl, onLogout = viewModel::logout)
-        }
         composable(
-            CLASS_DETAIL_ROUTE,
-            arguments = listOf(navArgument("classId") { type = NavType.LongType }),
+            SCHEDULE_ROUTE,
+            arguments = listOf(
+                navArgument("kind") { type = NavType.StringType },
+                navArgument("id") { type = NavType.LongType; defaultValue = -1L },
+                navArgument("date") { type = NavType.StringType; defaultValue = "" },
+            ),
         ) { entry ->
-            ClassDetailScreen(
-                data = data,
-                classId = entry.arguments?.getLong("classId") ?: -1L,
-                pendingClassIds = pendingClassIds,
-                onConfirm = viewModel::confirmAttendance,
-                onCancel = viewModel::cancelAttendance,
+            val args = entry.arguments
+            val target = ScheduleTarget(
+                kind = args?.getString("kind") ?: ScheduleTarget.EVENT_NEW,
+                id = args?.getLong("id")?.takeIf { it > 0 },
+                date = args?.getString("date")?.takeIf { it.isNotBlank() }?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+            )
+            ScheduleFormScreen(
+                target = target,
+                user = user,
+                viewModel = viewModel,
+                onClose = { navController.popBackStack() },
             )
         }
     }
 }
 
-private fun NavHostController.navigateToTab(tab: TopLevel) {
+private fun NavHostController.navigateToTab(tab: Tab) {
     navigate(tab.route) {
         popUpTo(graph.findStartDestination().id) { saveState = true }
         launchSingleTop = true

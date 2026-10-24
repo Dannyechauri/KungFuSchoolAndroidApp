@@ -203,28 +203,36 @@ Rules:
 
 ## ✅ Estado actual de la app Android (integrada con KungFuBackendService)
 
-La app ya no usa datos ficticios: consume la API REST de `KungFuBackendService` con sesión por cookie (`JSESSIONID`).
+La app ya no usa datos ficticios: consume la API REST del backend Node.js/Fastify de `KungFuBackendService` con sesión por cookie (`wushu_session`).
+
+El backend devuelve `ADMIN` para administradores, `INSTRUCTOR` para instructores y `USER` para alumnos. Android prioriza este rol al resolver el perfil, incluso si un alumno y un instructor comparten ID y nombre.
 
 ### Configurar el servidor
 - URL por defecto: `http://10.0.2.2:8080` (el `localhost` del PC visto desde el emulador).
 - En un móvil físico, abrir **Servidor** en la pantalla de login e indicar la IP del PC (p. ej. `http://192.168.1.50:8080`).
 - Se permite tráfico HTTP (`usesCleartextTraffic`) para desarrollo; en producción usar HTTPS.
 
-### Navegación implementada
-| Pestaña | Datos del backend | Acciones |
+### Navegación implementada (alineada con la web)
+Las pestañas dependen del rol de la sesión:
+
+| Pestaña | Roles | Contenido y acciones |
 |---|---|---|
-| Inicio | perfil, grado, próximas clases, asistencias | abrir clase |
-| Clases | `cursos_agendados`, `cursos`, `instructores`, `asistencias_curso`, `inscripciones` | confirmar asistencia (una clase o toda la serie futura), cancelar |
-| Progreso / Temario | `grados`, `formas`, `estilos`, `grado_forma`, `alumno_forma` | solo lectura |
-| Perfil | `alumnos` / `instructores`, `instructor_estilo` | cerrar sesión |
+| Inicio | todos | saludo con cinturón y avance de formas obligatorias, mis próximas actividades, actividades de la escuela por día; estadísticas para el administrador |
+| Mi ficha | alumnos e instructores con ficha | datos personales, grado, formas obligatorias y opcionales del grado (Sabida / Aprendiendo X % / Pendiente), marcar formas en aprendizaje, guardar % de avance, dejar de aprender, formas sabidas por estilo |
+| Calendario | todos | vista Semana / Próximas, filtro por sala; detalle del evento con apuntarse o quitarse (solo ese día o toda la serie), rol alumno/instructor para instructores, contador de asistentes si es visible y lista de participantes para gestores; botón «Sesión» para gestores |
+| Agenda | administrador e instructores | programar sesión puntual u horario habitual, horarios agrupados por día de la semana, editar o cancelar sesiones y horarios |
+| Cuenta | todos | permisos, servidor, cerrar sesión |
+
+Solo el administrador puede fijar el límite de plazas y si se muestra el número de asistentes. Alumnos, cursos, grados, formas, salas y contraseñas se gestionan desde la web.
 
 ### Endpoints usados
 - `POST /api/auth/login`, `GET /api/auth/me`, `DELETE /api/auth/logout`
-- `GET /api/database/tables/{tabla}/rows?limit=500`
-- `POST` / `DELETE /api/database/tables/asistencias_curso/rows` (única tabla que un usuario no administrador puede modificar)
+- `GET /api/me/profile`, `PUT` / `DELETE /api/me/forms/{formId}/progress`
+- `GET /api/calendar/events?from&to`, `rooms`, `courses`, `instructors`, `recurring-rules`
+- `POST` / `DELETE /api/calendar/events/{id}/participation?scope=occurrence|series`, `GET .../participants`
+- `POST` / `PATCH /api/calendar/events`, `POST /api/calendar/events/{id}/cancel`
+- `POST` / `PATCH /api/calendar/recurring-rules`, `POST /api/calendar/recurring-rules/{id}/cancel`
 
 ### Pendiente (no existe aún en el backend)
 - Retos y estiramientos (no hay tablas ni endpoints).
 - Exámenes / temario de examen.
-- Marcar formas aprendidas desde la app (el backend solo permite escribir `alumno_forma` a administradores).
-- Crear/editar cursos desde la app como instructor.

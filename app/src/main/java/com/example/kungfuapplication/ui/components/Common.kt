@@ -20,14 +20,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -40,11 +37,13 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.example.kungfuapplication.data.model.ClassItem
-import com.example.kungfuapplication.data.model.Grade
+import com.example.kungfuapplication.data.model.CalendarEvent
+import com.example.kungfuapplication.data.model.CourseType
+import com.example.kungfuapplication.data.model.shortAttendance
 
 @Composable
 fun LoadingState(modifier: Modifier = Modifier, message: String = "Cargando…") {
@@ -85,12 +84,7 @@ fun EmptyState(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            modifier = Modifier.size(48.dp),
-            tint = MaterialTheme.colorScheme.outline,
-        )
+        Icon(icon, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.outline)
         Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
         Text(
             message,
@@ -155,8 +149,8 @@ fun BeltStripe(colorName: String?, modifier: Modifier = Modifier, height: Dp = 1
 }
 
 @Composable
-fun BeltChip(grade: Grade?, modifier: Modifier = Modifier) {
-    val color = beltColorFor(grade?.beltColor)
+fun BeltChip(name: String?, beltColor: String?, modifier: Modifier = Modifier) {
+    val color = beltColorFor(beltColor ?: name)
     val onColor = if (color.luminance() > 0.5f) Color.Black else Color.White
     Surface(
         modifier = modifier,
@@ -166,7 +160,7 @@ fun BeltChip(grade: Grade?, modifier: Modifier = Modifier) {
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Text(
-            grade?.name ?: "Sin grado",
+            name ?: "Sin grado",
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
             style = MaterialTheme.typography.labelLarge,
         )
@@ -179,9 +173,9 @@ fun StatCard(icon: ImageVector, value: String, label: String, modifier: Modifier
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 16.dp, horizontal = 8.dp),
+                .padding(vertical = 14.dp, horizontal = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -197,62 +191,116 @@ fun StatCard(icon: ImageVector, value: String, label: String, modifier: Modifier
     }
 }
 
-/** Fila de lista para una clase agendada, usada en Inicio y en Clases. */
+enum class PillTone { Neutral, Primary, Success, Warning, Danger }
+
 @Composable
-fun ClassListItem(item: ClassItem, onClick: () -> Unit, modifier: Modifier = Modifier, showDate: Boolean = true) {
-    val dateTime = item.scheduled.dateTime
-    ListItem(
+fun StatusPill(text: String, tone: PillTone = PillTone.Neutral, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    val (container, content) = when (tone) {
+        PillTone.Neutral -> scheme.surfaceContainerHighest to scheme.onSurfaceVariant
+        PillTone.Primary -> scheme.primaryContainer to scheme.onPrimaryContainer
+        PillTone.Success -> Color(0xFFDCEFD9) to Color(0xFF1B5E20)
+        PillTone.Warning -> scheme.tertiaryContainer to scheme.onTertiaryContainer
+        PillTone.Danger -> scheme.errorContainer to scheme.onErrorContainer
+    }
+    Surface(modifier = modifier, shape = RoundedCornerShape(50), color = container, contentColor = content) {
+        Text(
+            text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * Tarjeta de una actividad de la agenda. La columna izquierda muestra la hora (o la fecha si [showDate]),
+ * y el borde se resalta cuando el usuario está apuntado.
+ */
+@Composable
+fun EventCard(event: CalendarEvent, onClick: () -> Unit, modifier: Modifier = Modifier, showDate: Boolean = false) {
+    val scheme = MaterialTheme.colorScheme
+    val mine = event.myParticipation != null && event.active
+    Surface(
         modifier = modifier
+            .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        leadingContent = {
-            DateBadge(
-                top = if (showDate) dateTime?.toLocalDate()?.formatMonthShort().orEmpty() else "",
-                main = if (showDate) dateTime?.dayOfMonth?.toString() ?: "–" else dateTime?.formatTime() ?: "–",
-                highlighted = item.isMine,
-            )
-        },
-        headlineContent = {
-            Text(item.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
-        },
-        supportingContent = {
-            val parts = buildList {
-                if (showDate) dateTime?.let { add("${it.toLocalDate().formatWeekday()} · ${it.formatTime()}") }
-                item.instructor?.name?.let { add(it) }
-                if (!item.scheduled.active) add("Cancelada")
-            }
-            Text(parts.joinToString(" · "), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        },
-        trailingContent = {
-            when {
-                item.teaching -> Icon(Icons.Filled.School, contentDescription = "Impartes esta clase", tint = MaterialTheme.colorScheme.secondary)
-                item.myAttendance != null -> Icon(Icons.Filled.CheckCircle, contentDescription = "Asistencia confirmada", tint = MaterialTheme.colorScheme.primary)
-                else -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Person, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(2.dp))
-                    Text(item.attendees.size.toString(), style = MaterialTheme.typography.labelLarge)
+        shape = RoundedCornerShape(16.dp),
+        color = if (mine) scheme.primaryContainer.copy(alpha = 0.35f) else scheme.surfaceContainerLow,
+        border = if (mine) BorderStroke(1.5.dp, scheme.primary) else null,
+    ) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(
+                modifier = Modifier
+                    .width(56.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (event.active) scheme.secondaryContainer else scheme.surfaceContainerHighest)
+                    .padding(vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                if (showDate) {
+                    Text(event.start.toLocalDate().formatMonthShort(), style = MaterialTheme.typography.labelSmall)
+                    Text(event.start.dayOfMonth.toString(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                } else {
+                    Text(event.start.formatTime(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text(event.end.formatTime(), style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
                 }
             }
-        },
-    )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    event.courseName,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textDecoration = if (event.active) null else TextDecoration.LineThrough,
+                )
+                val details = buildList {
+                    if (showDate) add("${event.start.toLocalDate().formatWeekday()} · ${event.start.formatTime()}–${event.end.formatTime()}")
+                    event.roomName?.let { add(it) }
+                    event.instructorName?.let { add(it) }
+                }
+                Text(
+                    details.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 2.dp)) {
+                    when {
+                        !event.active -> StatusPill("Cancelada", PillTone.Danger)
+                        event.full -> StatusPill("Completo", PillTone.Danger)
+                    }
+                    if (event.courseType == CourseType.CURSO_ESPECIAL) StatusPill("Especial", PillTone.Warning)
+                    if (mine) StatusPill("Apuntado", PillTone.Primary)
+                }
+            }
+            val count = event.shortAttendance()
+            if (mine) {
+                Icon(Icons.Filled.CheckCircle, contentDescription = "Estás apuntado", tint = scheme.primary)
+            } else if (count != null && !event.full) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Person, contentDescription = "Asistentes", modifier = Modifier.size(16.dp), tint = scheme.onSurfaceVariant)
+                    Spacer(Modifier.width(2.dp))
+                    Text(count, style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
 }
 
 @Composable
-private fun DateBadge(top: String, main: String, highlighted: Boolean) {
-    val container = if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer
-    val content = if (highlighted) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer
-    Column(
-        modifier = Modifier
-            .size(52.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(container),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        if (top.isNotEmpty()) {
-            Text(top, style = MaterialTheme.typography.labelSmall, color = content)
+fun InfoLine(icon: ImageVector, label: String, value: String, modifier: Modifier = Modifier) {
+    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.bodyLarge)
         }
-        Text(main, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = content)
     }
 }

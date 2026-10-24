@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import java.text.Normalizer
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.Period
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -16,8 +17,14 @@ private val fullDayFormatter = DateTimeFormatter.ofPattern("EEEE d 'de' MMMM", s
 private val monthYearFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", spanish)
 private val weekdayInitialFormatter = DateTimeFormatter.ofPattern("EEE", spanish)
 private val monthShortFormatter = DateTimeFormatter.ofPattern("MMM", spanish)
+private val numericDateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy", spanish)
 
 fun LocalDateTime.formatTime(): String = format(timeFormatter)
+fun LocalTime.formatTime(): String = format(timeFormatter)
+fun LocalDate.formatNumeric(): String = format(numericDateFormatter)
+fun timeRange(start: LocalDateTime, end: LocalDateTime): String =
+    if (start.toLocalDate() == end.toLocalDate()) "${start.formatTime()} – ${end.formatTime()}"
+    else "${start.toLocalDate().formatShortDay()} ${start.formatTime()} – ${end.toLocalDate().formatShortDay()} ${end.formatTime()}"
 fun LocalDate.formatShortDay(): String = format(shortDayFormatter).capitalizeFirst()
 fun LocalDate.formatLong(): String = format(longDateFormatter)
 fun LocalDate.formatFullDay(): String = format(fullDayFormatter).capitalizeFirst()

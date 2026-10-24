@@ -7,7 +7,7 @@ import okhttp3.CookieJar
 import okhttp3.HttpUrl
 
 /**
- * Guarda las cookies (JSESSIONID del backend) para que la sesión sobreviva
+ * Guarda la cookie wushu_session del backend para que la sesión sobreviva
  * a reinicios de la app mientras siga activa en el servidor.
  */
 class PersistentCookieJar(context: Context) : CookieJar {
