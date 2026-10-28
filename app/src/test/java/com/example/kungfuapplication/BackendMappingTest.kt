@@ -11,6 +11,9 @@ import com.example.kungfuapplication.data.model.ParticipationSettings
 import com.example.kungfuapplication.data.model.RulePayload
 import com.example.kungfuapplication.data.model.SessionUser
 import com.example.kungfuapplication.data.model.UserRole
+import com.example.kungfuapplication.data.model.PerformancePayload
+import com.example.kungfuapplication.data.model.RankingCategory
+import com.example.kungfuapplication.data.model.ConfirmationStatus
 import com.example.kungfuapplication.data.model.attendanceSummary
 import com.example.kungfuapplication.data.model.calendarErrorText
 import com.example.kungfuapplication.data.model.isSeatBlocked
@@ -22,6 +25,9 @@ import com.example.kungfuapplication.data.remote.parseProfile
 import com.example.kungfuapplication.data.remote.parseRule
 import com.example.kungfuapplication.data.remote.parseSessionUser
 import com.example.kungfuapplication.data.remote.toJson
+import com.example.kungfuapplication.data.remote.parsePerformanceRankings
+import com.example.kungfuapplication.data.remote.parsePerformanceRecord
+import com.example.kungfuapplication.data.remote.parsePerformanceRequest
 import com.example.kungfuapplication.ui.calendar.FormCheck
 import com.example.kungfuapplication.ui.calendar.checkEvent
 import com.example.kungfuapplication.ui.calendar.checkLimit
@@ -40,6 +46,55 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 
 class BackendMappingTest {
+
+    @Test
+    fun performanceAdminResolutionAndWitnessStates() {
+        val record = parsePerformanceRecord(json("""{
+            "id":12,"studentId":5,"studentName":"Marc","date":"2026-10-28",
+            "approvedAt":"2026-10-28T10:00:00Z","rejectedAt":null,"resolvedByAdmin":true,
+            "physicalWork":true,"forms":[{"id":9,"name":"Forma","style":"Shaolin"}],
+            "confirmations":[{"studentId":7,"name":"Chen","status":"NOT_REQUIRED"}]
+        }"""))
+        assertEquals("Aprobado por el administrador", record.statusLabel)
+        assertEquals(ConfirmationStatus.NOT_REQUIRED, record.confirmations.single().status)
+        assertEquals(9L, record.forms.single().id)
+        assertEquals("Rechazado por el administrador", record.copy(approvedAt = null, rejectedAt = "2026-10-28").statusLabel)
+        assertEquals("Aprobado · 2 confirmaciones", record.copy(resolvedByAdmin = false).statusLabel)
+        assertEquals("Pendiente · 0/2 confirmaciones", record.copy(approvedAt = null, resolvedByAdmin = false,
+            confirmations = record.confirmations.map { it.copy(status = ConfirmationStatus.PENDING) }).statusLabel)
+        val legacy = parsePerformanceRecord(json("""{"id":13,"studentId":5,"date":"2026-10-28"}"""))
+        assertFalse(legacy.resolvedByAdmin)
+    }
+
+    @Test
+    fun performanceRankingsCanExpandWithoutLosingOwnPosition() {
+        val rankings = parsePerformanceRankings(json("""{"month":"2026-10","overall":[
+            {"rank":1,"studentId":1,"name":"Uno","points":9},
+            {"rank":2,"studentId":2,"name":"Dos","points":8},
+            {"rank":3,"studentId":3,"name":"Tres","points":7},
+            {"rank":7,"studentId":7,"name":"Yo","points":1}] }"""))
+        assertEquals(3, rankings.visibleEntries(RankingCategory.OVERALL, isAdmin = true, expanded = false).size)
+        assertEquals(4, rankings.visibleEntries(RankingCategory.OVERALL, isAdmin = true, expanded = true).size)
+        assertEquals(7, rankings.visibleEntries(RankingCategory.OVERALL, isAdmin = false, expanded = false).last().rank)
+        assertTrue(rankings.categories[RankingCategory.CARDIO].orEmpty().isEmpty())
+    }
+
+    @Test
+    fun performanceRequestsAndPayloadMatchBackend() {
+        val request = parsePerformanceRequest(json("""{
+            "id":"42","studentName":"Chen","date":"2026-10-28","cardioWork":true,
+            "forms":["Wu Bu Quan","Lian Huan Quan"]
+        }"""))
+        assertEquals(42L, request.id)
+        assertTrue(request.cardioWork)
+        assertEquals(listOf("Wu Bu Quan", "Lian Huan Quan"), request.forms)
+        val payload = PerformancePayload(LocalDate.of(2026, 10, 28), true, false, true, false,
+            listOf(9, 9), listOf(7, 8, 7)).toJson()
+        assertEquals("\"2026-10-28\"", payload["date"].toString())
+        assertEquals("[9]", payload["formIds"].toString())
+        assertEquals("[7,8]", payload["confirmerIds"].toString())
+        assertEquals("true", payload["stretching"].toString())
+    }
 
     private fun json(text: String): JsonObject = Json.parseToJsonElement(text).jsonObject
 

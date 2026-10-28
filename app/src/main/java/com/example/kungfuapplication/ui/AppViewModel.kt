@@ -17,6 +17,13 @@ import com.example.kungfuapplication.data.model.RecurringRule
 import com.example.kungfuapplication.data.model.Room
 import com.example.kungfuapplication.data.model.RulePayload
 import com.example.kungfuapplication.data.model.SessionUser
+import com.example.kungfuapplication.data.model.PerformanceConfirmer
+import com.example.kungfuapplication.data.model.PerformanceDecision
+import com.example.kungfuapplication.data.model.PerformanceForm
+import com.example.kungfuapplication.data.model.PerformancePayload
+import com.example.kungfuapplication.data.model.PerformanceRankings
+import com.example.kungfuapplication.data.model.PerformanceRecord
+import com.example.kungfuapplication.data.model.PerformanceRequest
 import com.example.kungfuapplication.data.model.calendarErrorText
 import com.example.kungfuapplication.data.model.joinMessage
 import com.example.kungfuapplication.data.model.leaveMessage
@@ -33,6 +40,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -71,6 +80,21 @@ data class ProfileUiState(
 )
 
 enum class CalendarMode { WEEK, LIST }
+
+data class PerformanceUiState(
+    val records: List<PerformanceRecord> = emptyList(),
+    val rankings: PerformanceRankings? = null,
+    val forms: List<PerformanceForm> = emptyList(),
+    val confirmers: List<PerformanceConfirmer> = emptyList(),
+    val inbox: List<PerformanceRequest> = emptyList(),
+    val loaded: Boolean = false,
+    val isLoading: Boolean = false,
+    val isSaving: Boolean = false,
+    val busyRecordIds: Set<Long> = emptySet(),
+    val error: String? = null,
+    val requestsError: String? = null,
+    val formError: String? = null,
+)
 
 data class CalendarUiState(
     val selectedDate: LocalDate = schoolToday(),
@@ -135,6 +159,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _manage = MutableStateFlow(ManageUiState())
     val manage: StateFlow<ManageUiState> = _manage.asStateFlow()
+
+    private val _performance = MutableStateFlow(PerformanceUiState())
+    val performance: StateFlow<PerformanceUiState> = _performance.asStateFlow()
+    private val performanceMutex = Mutex()
+    private var performanceSession = 0L
+    private var pendingRequestVersion = 0L
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
@@ -205,6 +235,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun resetData() {
+        performanceSession++
+        pendingRequestVersion++
+        _performance.value = PerformanceUiState()
         _profile.value = ProfileUiState()
         _calendar.value = CalendarUiState()
         _participants.value = emptyMap()
@@ -229,9 +262,117 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun loadAll(user: SessionUser) = coroutineScope {
         val profileJob = if (user.hasProfile) async { loadProfile() } else null
         val roomsJob = async { loadRooms() }
+        val performanceJob = async {
+            if (_performance.value.loaded) loadPerformanceData() else refreshPerformanceRequests()
+        }
         loadEvents()
         profileJob?.await()
         roomsJob.await()
+        performanceJob.await()
+    }
+
+    suspend fun refreshPerformanceRequests() {
+        if (currentUser == null) return
+        val session = performanceSession
+        val version = ++pendingRequestVersion
+        try {
+            val pending = repository.pendingPerformanceRequests()
+            if (session == performanceSession && version == pendingRequestVersion) {
+                _performance.update { it.copy(inbox = pending, requestsError = null) }
+            }
+        } catch (e: Exception) {
+            if (session != performanceSession || version != pendingRequestVersion) return
+            val message = handleError(e) ?: return
+            _performance.update { it.copy(requestsError = message) }
+        }
+    }
+
+    fun reloadPerformance() {
+        viewModelScope.launch { loadPerformanceData() }
+    }
+
+    private suspend fun loadPerformanceData() = performanceMutex.withLock {
+        val user = currentUser ?: return@withLock
+        val session = performanceSession
+        _performance.update { it.copy(isLoading = true, error = null) }
+        try {
+            coroutineScope {
+                val records = async { repository.performanceRecords() }
+                val rankings = async { repository.performanceRankings() }
+                val forms = async { if (user.hasProfile) repository.performanceForms() else emptyList() }
+                val confirmers = async { if (user.hasProfile) repository.performanceConfirmers() else emptyList() }
+                val loadedRecords = records.await()
+                val loadedRankings = rankings.await()
+                val loadedForms = forms.await()
+                val loadedConfirmers = confirmers.await()
+                if (session == performanceSession) {
+                    _performance.update { it.copy(
+                        records = loadedRecords, rankings = loadedRankings,
+                        forms = loadedForms, confirmers = loadedConfirmers, loaded = true, isLoading = false,
+                    ) }
+                    refreshPerformanceRequests()
+                }
+            }
+        } catch (e: Exception) {
+            if (session != performanceSession) return@withLock
+            _performance.update { it.copy(isLoading = false) }
+            val message = handleError(e) ?: return@withLock
+            _performance.update { it.copy(error = message) }
+        }
+    }
+
+    fun savePerformance(payload: PerformancePayload) {
+        val user = currentUser ?: return
+        if (!user.hasProfile || _performance.value.isSaving) return
+        val confirmers = payload.confirmerIds.distinct()
+        if (confirmers.size !in 2..100 || user.studentId in confirmers || payload.formIds.distinct().size > 30) {
+            _performance.update { it.copy(formError = "Selecciona de 2 a 100 confirmantes distintos de ti y un máximo de 30 formas.") }
+            return
+        }
+        val session = performanceSession
+        _performance.update { it.copy(isSaving = true, formError = null) }
+        viewModelScope.launch {
+            try {
+                repository.savePerformance(payload)
+                if (session != performanceSession) return@launch
+                loadPerformanceData()
+                _messages.send("Desempeño guardado. Se han enviado las solicitudes de confirmación.")
+            } catch (e: Exception) {
+                if (session != performanceSession) return@launch
+                val message = handleError(e) ?: return@launch
+                _performance.update { it.copy(formError = message) }
+            } finally {
+                if (session == performanceSession) _performance.update { it.copy(isSaving = false) }
+            }
+        }
+    }
+
+    fun respondToPerformance(recordId: Long, decision: PerformanceDecision) {
+        if (recordId in _performance.value.busyRecordIds) return
+        val user = currentUser ?: return
+        val session = performanceSession
+        _performance.update { it.copy(busyRecordIds = it.busyRecordIds + recordId) }
+        viewModelScope.launch {
+            try {
+                repository.respondToPerformance(recordId, decision)
+                if (session != performanceSession) return@launch
+                pendingRequestVersion++
+                _performance.update { it.copy(inbox = it.inbox.filterNot { request -> request.id == recordId }) }
+                val message = if (user.isAdmin) {
+                    if (decision == PerformanceDecision.CONFIRMED) "Aprobado por el administrador." else "Rechazado por el administrador."
+                } else {
+                    if (decision == PerformanceDecision.CONFIRMED) "Confirmación registrada." else "Has indicado que no puedes confirmar esta actividad."
+                }
+                _messages.send(message)
+                loadPerformanceData()
+            } catch (e: Exception) {
+                if (session != performanceSession) return@launch
+                handleError(e)?.let { _messages.send(it) }
+                refreshPerformanceRequests()
+            } finally {
+                if (session == performanceSession) _performance.update { it.copy(busyRecordIds = it.busyRecordIds - recordId) }
+            }
+        }
     }
 
     // ---------- Mi ficha ----------

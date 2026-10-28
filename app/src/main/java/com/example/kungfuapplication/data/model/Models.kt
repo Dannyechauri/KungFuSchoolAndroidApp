@@ -3,6 +3,7 @@ package com.example.kungfuapplication.data.model
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.YearMonth
 
 enum class UserRole { ADMIN, INSTRUCTOR, USER }
 
@@ -207,4 +208,89 @@ data class RulePayload(
     val startsOn: LocalDate,
     val endsOn: LocalDate?,
     val settings: ParticipationSettings?,
+)
+
+enum class RankingCategory(val apiKey: String, val label: String) {
+    OVERALL("overall", "Absoluto"),
+    ATTENDANCE("attendance", "Asistencia"),
+    STRETCHING("stretching", "Estiramiento"),
+    STRENGTH("strength", "Entrenamiento de fuerza"),
+    CARDIO("cardio", "Cardio"),
+    FORMS("forms", "Cantidad de formas"),
+}
+
+data class RankingEntry(val rank: Int, val studentId: Long, val name: String, val points: Int)
+
+data class PerformanceRankings(val month: YearMonth, val categories: Map<RankingCategory, List<RankingEntry>>) {
+    fun visibleEntries(category: RankingCategory, isAdmin: Boolean, expanded: Boolean): List<RankingEntry> {
+        val entries = categories[category].orEmpty()
+        return if (isAdmin && !expanded) entries.take(3) else entries
+    }
+}
+
+enum class ConfirmationStatus(val label: String) {
+    PENDING("pendiente"), CONFIRMED("confirmado"), REJECTED("rechazado"), NOT_REQUIRED("no requerido"),
+}
+
+enum class PerformanceDecision { CONFIRMED, REJECTED }
+
+data class PerformanceForm(
+    val id: Long,
+    val name: String,
+    val style: String,
+    val known: Boolean = false,
+    val inCurrentGrade: Boolean = false,
+    val optional: Boolean = false,
+)
+
+data class PerformanceConfirmer(val id: Long, val name: String, val role: String)
+
+data class PerformanceConfirmation(val studentId: Long, val name: String, val status: ConfirmationStatus)
+
+data class PerformanceRequest(
+    val id: Long,
+    val studentName: String,
+    val date: LocalDate,
+    val physicalWork: Boolean,
+    val cardioWork: Boolean,
+    val stretching: Boolean,
+    val attendedClass: Boolean,
+    val forms: List<String>,
+)
+
+data class PerformanceRecord(
+    val id: Long,
+    val studentId: Long,
+    val studentName: String,
+    val date: LocalDate,
+    val approvedAt: String?,
+    val rejectedAt: String?,
+    val resolvedByAdmin: Boolean,
+    val physicalWork: Boolean,
+    val cardioWork: Boolean,
+    val stretching: Boolean,
+    val attendedClass: Boolean,
+    val forms: List<PerformanceForm>,
+    val confirmations: List<PerformanceConfirmation>,
+) {
+    val statusLabel: String
+        get() {
+            if (resolvedByAdmin && rejectedAt != null) return "Rechazado por el administrador"
+            if (resolvedByAdmin && approvedAt != null) return "Aprobado por el administrador"
+            if (rejectedAt != null) return "Rechazado"
+            if (approvedAt != null) return "Aprobado · 2 confirmaciones"
+            val confirmed = confirmations.count { it.status == ConfirmationStatus.CONFIRMED }
+            val prefix = if (confirmations.any { it.status == ConfirmationStatus.PENDING }) "Pendiente" else "Sin aprobar"
+            return "$prefix · $confirmed/2 confirmaciones"
+        }
+}
+
+data class PerformancePayload(
+    val date: LocalDate,
+    val physicalWork: Boolean,
+    val cardioWork: Boolean,
+    val stretching: Boolean,
+    val attendedClass: Boolean,
+    val formIds: List<Long>,
+    val confirmerIds: List<Long>,
 )

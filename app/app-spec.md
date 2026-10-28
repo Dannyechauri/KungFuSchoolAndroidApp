@@ -121,6 +121,16 @@ Rules:
 
 ---
 
+### 7. Daily Performance
+
+- Students and linked instructors can register or replace a daily session, select activity checkboxes and up to 30 forms, and choose 2 to 100 witnesses.
+- Requests can be confirmed or rejected. Two confirmations approve a session; pending requests close when the backend resolves it.
+- Administrators can approve or reject any open request without waiting for witnesses. History displays "Aprobado por el administrador" or "Rechazado por el administrador" for these decisions.
+- Monthly rankings include overall, attendance, stretching, strength, cardio, and forms. Administrators can expand each category independently; other accounts see the top three plus their own position.
+- The performance navigation item is highlighted with a pending-request count for students and instructors. Requests refresh on resume and every 30 seconds while the app is resumed, and immediately after a response.
+- The screen contains requests, rankings, session registration, and history. Registration is hidden for administrators.
+- Linked instructors access agenda management from the calendar toolbar, keeping the bottom navigation at five items.
+
 ## 📐 UI / UX (Android)
 
 ### Navigation (Bottom Bar)

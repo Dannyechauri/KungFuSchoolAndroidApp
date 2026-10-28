@@ -23,6 +23,16 @@ import com.example.kungfuapplication.data.model.RulePayload
 import com.example.kungfuapplication.data.model.SessionUser
 import com.example.kungfuapplication.data.model.StudentInfo
 import com.example.kungfuapplication.data.model.UserRole
+import com.example.kungfuapplication.data.model.ConfirmationStatus
+import com.example.kungfuapplication.data.model.PerformanceConfirmation
+import com.example.kungfuapplication.data.model.PerformanceConfirmer
+import com.example.kungfuapplication.data.model.PerformanceForm
+import com.example.kungfuapplication.data.model.PerformancePayload
+import com.example.kungfuapplication.data.model.PerformanceRankings
+import com.example.kungfuapplication.data.model.PerformanceRecord
+import com.example.kungfuapplication.data.model.PerformanceRequest
+import com.example.kungfuapplication.data.model.RankingCategory
+import com.example.kungfuapplication.data.model.RankingEntry
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -37,6 +47,7 @@ import kotlinx.serialization.json.putJsonArray
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 
 private val apiDateTime = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm")
@@ -233,3 +244,75 @@ fun RulePayload.toJson(): JsonObject = buildJsonObject {
 }
 
 internal fun JsonElement.asObject(): JsonObject = jsonObject
+
+fun parsePerformanceForm(json: JsonObject) = PerformanceForm(
+    id = json.long("id") ?: error("Forma sin identificador"),
+    name = json.str("name").orEmpty(),
+    style = json.str("style").orEmpty(),
+    known = json.bool("known") ?: false,
+    inCurrentGrade = json.bool("inCurrentGrade") ?: false,
+    optional = json.bool("optional") ?: false,
+)
+
+fun parsePerformanceConfirmer(json: JsonObject) = PerformanceConfirmer(
+    id = json.long("id") ?: error("Confirmante sin identificador"),
+    name = json.str("name").orEmpty(),
+    role = json.str("role").orEmpty(),
+)
+
+fun parsePerformanceRequest(json: JsonObject) = PerformanceRequest(
+    id = json.long("id") ?: error("Solicitud sin identificador"),
+    studentName = json.str("studentName").orEmpty(),
+    date = json.date("date") ?: error("Solicitud sin fecha"),
+    physicalWork = json.bool("physicalWork") ?: false,
+    cardioWork = json.bool("cardioWork") ?: false,
+    stretching = json.bool("stretching") ?: false,
+    attendedClass = json.bool("attendedClass") ?: false,
+    forms = json.array("forms").mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
+)
+
+fun parsePerformanceRecord(json: JsonObject) = PerformanceRecord(
+    id = json.long("id") ?: error("Desempeño sin identificador"),
+    studentId = json.long("studentId") ?: error("Desempeño sin alumno"),
+    studentName = json.str("studentName").orEmpty(),
+    date = json.date("date") ?: error("Desempeño sin fecha"),
+    approvedAt = json.str("approvedAt"),
+    rejectedAt = json.str("rejectedAt"),
+    resolvedByAdmin = json.bool("resolvedByAdmin") ?: false,
+    physicalWork = json.bool("physicalWork") ?: false,
+    cardioWork = json.bool("cardioWork") ?: false,
+    stretching = json.bool("stretching") ?: false,
+    attendedClass = json.bool("attendedClass") ?: false,
+    forms = json.objects("forms").map(::parsePerformanceForm),
+    confirmations = json.objects("confirmations").map {
+        PerformanceConfirmation(
+            studentId = it.long("studentId") ?: error("Confirmación sin alumno"),
+            name = it.str("name").orEmpty(),
+            status = ConfirmationStatus.valueOf(it.str("status") ?: "PENDING"),
+        )
+    },
+)
+
+fun parsePerformanceRankings(json: JsonObject) = PerformanceRankings(
+    month = YearMonth.parse(json.str("month")),
+    categories = RankingCategory.entries.associateWith { category ->
+        json.objects(category.apiKey).map {
+            RankingEntry(
+                rank = it.int("rank") ?: 0,
+                studentId = it.long("studentId") ?: error("Ranking sin alumno"),
+                name = it.str("name").orEmpty(),
+                points = it.int("points") ?: 0,
+            )
+        }
+    },
+)
+
+fun PerformancePayload.toJson(): JsonObject = buildJsonObject {
+    put("date", date.toString())
+    put("physicalWork", physicalWork)
+    put("cardioWork", cardioWork)
+    put("stretching", stretching)
+    put("attendedClass", attendedClass)
+    putJsonArray("formIds") { formIds.distinct().forEach { add(JsonPrimitive(it)) } }
+    putJsonArray("confirmerIds") { confirmerIds.distinct().forEach { add(JsonPrimitive(it)) } }
+}

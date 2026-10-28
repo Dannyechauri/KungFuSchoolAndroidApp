@@ -13,6 +13,8 @@ import com.example.kungfuapplication.data.model.RecurringRule
 import com.example.kungfuapplication.data.model.Room
 import com.example.kungfuapplication.data.model.RulePayload
 import com.example.kungfuapplication.data.model.SessionUser
+import com.example.kungfuapplication.data.model.PerformanceDecision
+import com.example.kungfuapplication.data.model.PerformancePayload
 import com.example.kungfuapplication.data.remote.ApiClient
 import com.example.kungfuapplication.data.remote.ApiException
 import com.example.kungfuapplication.data.remote.asObject
@@ -25,6 +27,11 @@ import com.example.kungfuapplication.data.remote.parseProfile
 import com.example.kungfuapplication.data.remote.parseRoom
 import com.example.kungfuapplication.data.remote.parseRule
 import com.example.kungfuapplication.data.remote.parseSessionUser
+import com.example.kungfuapplication.data.remote.parsePerformanceConfirmer
+import com.example.kungfuapplication.data.remote.parsePerformanceForm
+import com.example.kungfuapplication.data.remote.parsePerformanceRankings
+import com.example.kungfuapplication.data.remote.parsePerformanceRecord
+import com.example.kungfuapplication.data.remote.parsePerformanceRequest
 import com.example.kungfuapplication.data.remote.toApiDateTime
 import com.example.kungfuapplication.data.remote.toJson
 import kotlinx.serialization.json.buildJsonObject
@@ -137,5 +144,23 @@ class SchoolRepository(
 
     suspend fun cancelRule(ruleId: Long) {
         api.post("/api/calendar/recurring-rules/$ruleId/cancel")
+    }
+
+    suspend fun performanceRecords() = api.getArray("/api/performance/records").map(::parsePerformanceRecord)
+
+    suspend fun performanceRankings() = parsePerformanceRankings(api.get("/api/performance/rankings").asObject())
+
+    suspend fun performanceForms() = api.getArray("/api/performance/forms").map(::parsePerformanceForm)
+
+    suspend fun performanceConfirmers() = api.getArray("/api/performance/confirmers").map(::parsePerformanceConfirmer)
+
+    suspend fun pendingPerformanceRequests() = api.getArray("/api/performance/confirmations/pending").map(::parsePerformanceRequest)
+
+    suspend fun savePerformance(payload: PerformancePayload) {
+        api.post("/api/performance/records", payload.toJson())
+    }
+
+    suspend fun respondToPerformance(recordId: Long, decision: PerformanceDecision) {
+        api.post("/api/performance/confirmations/$recordId/respond", buildJsonObject { put("decision", decision.name) })
     }
 }
