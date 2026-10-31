@@ -76,7 +76,7 @@ import com.example.kungfuapplication.ui.schoolToday
 import java.time.LocalDate
 
 private enum class PerformanceView(val label: String) {
-    REQUESTS("Por confirmar"), RANKINGS("Ranking"), SESSION("Sesión"), HISTORY("Historial"),
+    SESSION("Sesión"), RANKINGS("Ranking"), REQUESTS("Por confirmar"), HISTORY("Historial"),
 }
 
 @Composable
@@ -100,7 +100,9 @@ fun PerformanceContent(
         return
     }
     val views = remember(user) { PerformanceView.entries.filter { it != PerformanceView.SESSION || user.hasProfile } }
-    var selectedView by rememberSaveable(user.userId, user.role) { mutableStateOf(PerformanceView.REQUESTS.name) }
+    var selectedView by rememberSaveable(user.userId, user.role) {
+        mutableStateOf(if (user.hasProfile) PerformanceView.SESSION.name else PerformanceView.RANKINGS.name)
+    }
     val selectedIndex = views.indexOfFirst { it.name == selectedView }.coerceAtLeast(0)
     Column(Modifier.fillMaxSize()) {
         PrimaryScrollableTabRow(selectedTabIndex = selectedIndex, edgePadding = 0.dp) {
