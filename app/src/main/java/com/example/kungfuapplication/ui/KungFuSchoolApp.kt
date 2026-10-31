@@ -261,6 +261,7 @@ private fun AppNavHost(
     viewModel: AppViewModel,
     isRefreshing: Boolean,
 ) {
+    val account by viewModel.account.collectAsStateWithLifecycle()
     NavHost(navController = navController, startDestination = if (user.hasProfile) Tab.Profile.route else Tab.Home.route) {
         composable(Tab.Home.route) {
             Refreshable(isRefreshing, viewModel::refresh) {
@@ -297,7 +298,13 @@ private fun AppNavHost(
             }
         }
         composable(Tab.Account.route) {
-            AccountScreen(user = user, baseUrl = viewModel.baseUrl, onLogout = viewModel::logout)
+            AccountScreen(
+                user = user,
+                baseUrl = viewModel.baseUrl,
+                state = account,
+                onChangePassword = viewModel::changePassword,
+                onLogout = viewModel::logout,
+            )
         }
         composable(EVENT_ROUTE, arguments = listOf(navArgument("eventId") { type = NavType.LongType })) { entry ->
             EventDetailScreen(

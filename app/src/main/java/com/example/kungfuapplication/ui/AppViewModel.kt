@@ -70,8 +70,14 @@ sealed interface SessionState {
 data class LoginUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
+    val notice: String? = null,
     val lastEmail: String = "",
     val baseUrl: String = AppSettings.DEFAULT_BASE_URL,
+)
+
+data class AccountUiState(
+    val isChangingPassword: Boolean = false,
+    val passwordError: String? = null,
 )
 
 data class ProfileUiState(
@@ -156,6 +162,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _login = MutableStateFlow(LoginUiState(lastEmail = settings.lastEmail, baseUrl = settings.baseUrl))
     val login: StateFlow<LoginUiState> = _login.asStateFlow()
 
+    private val _account = MutableStateFlow(AccountUiState())
+    val account: StateFlow<AccountUiState> = _account.asStateFlow()
+
     private val _profile = MutableStateFlow(ProfileUiState())
     val profile: StateFlow<ProfileUiState> = _profile.asStateFlow()
 
@@ -209,7 +218,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         repository.updateBaseUrl(baseUrl)
-        _login.update { it.copy(isLoading = true, error = null, baseUrl = repository.baseUrl) }
+        _login.update { it.copy(isLoading = true, error = null, notice = null, baseUrl = repository.baseUrl) }
         viewModelScope.launch {
             try {
                 val user = repository.login(email, password)
@@ -230,19 +239,41 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun changePassword(currentPassword: String, newPassword: String) {
+        if (_account.value.isChangingPassword) return
+        _account.value = AccountUiState(isChangingPassword = true)
+        viewModelScope.launch {
+            try {
+                repository.changePassword(currentPassword, newPassword)
+                repository.clearLocalSession()
+                onLoggedOut(null, "Contraseña cambiada. Inicia sesión con tu nueva contraseña.")
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                if (e.isUnauthorized && e.message != "La contraseña actual no es correcta.") {
+                    repository.clearLocalSession()
+                    onLoggedOut("Tu sesión ha caducado. Vuelve a iniciar sesión.")
+                } else {
+                    _account.update { it.copy(isChangingPassword = false, passwordError = e.userMessage) }
+                }
+            }
+        }
+    }
+
     private fun onLoggedIn(user: SessionUser) {
         resetData()
         _session.value = SessionState.LoggedIn(user)
         viewModelScope.launch { loadAll(user) }
     }
 
-    private fun onLoggedOut(message: String?) {
+    private fun onLoggedOut(message: String?, notice: String? = null) {
         _session.value = SessionState.LoggedOut
         resetData()
-        _login.update { it.copy(isLoading = false, error = message, baseUrl = repository.baseUrl) }
+        _account.value = AccountUiState()
+        _login.update { it.copy(isLoading = false, error = message, notice = notice, baseUrl = repository.baseUrl) }
     }
 
     private fun resetData() {
+        _account.value = AccountUiState()
         performanceSession++
         pendingRequestVersion++
         _performance.value = PerformanceUiState()

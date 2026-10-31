@@ -76,6 +76,16 @@ class SchoolRepository(
         }
     }
 
+    suspend fun changePassword(currentPassword: String, newPassword: String) {
+        val body = buildJsonObject {
+            put("currentPassword", currentPassword)
+            put("newPassword", newPassword)
+        }
+        api.put("/api/me/password", body)
+    }
+
+    fun clearLocalSession() = api.clearSession()
+
     fun updateBaseUrl(url: String) {
         val normalized = AppSettings.normalizeBaseUrl(url)
         if (normalized != settings.baseUrl) {

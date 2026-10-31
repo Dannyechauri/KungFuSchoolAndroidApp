@@ -15,12 +15,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Dns
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,15 +33,29 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.kungfuapplication.data.model.SessionUser
+import com.example.kungfuapplication.ui.AccountUiState
 import com.example.kungfuapplication.ui.components.InfoLine
 import com.example.kungfuapplication.ui.components.InitialsAvatar
 
 @Composable
-fun AccountScreen(user: SessionUser, baseUrl: String, onLogout: () -> Unit) {
+fun AccountScreen(
+    user: SessionUser,
+    baseUrl: String,
+    state: AccountUiState,
+    onChangePassword: (currentPassword: String, newPassword: String) -> Unit,
+    onLogout: () -> Unit,
+) {
     var confirmLogout by remember { mutableStateOf(false) }
+    var currentPassword by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmation by remember { mutableStateOf("") }
+    var validationError by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -59,12 +75,65 @@ fun AccountScreen(user: SessionUser, baseUrl: String, onLogout: () -> Unit) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 InfoLine(Icons.Filled.Badge, "Permisos", permissionsText(user))
                 InfoLine(Icons.Filled.Dns, "Servidor", baseUrl)
-                InfoLine(
-                    Icons.Filled.Info,
-                    "Contraseña",
-                    if (user.isAdmin) "Las contraseñas de alumnos e instructores se cambian desde la web, al editar el alumno."
-                    else "Si necesitas cambiar tu contraseña, pídeselo a administración.",
+            }
+        }
+
+        ElevatedCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Cambiar contraseña", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                OutlinedTextField(
+                    value = currentPassword,
+                    onValueChange = { currentPassword = it; validationError = null },
+                    label = { Text("Contraseña actual") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    enabled = !state.isChangingPassword,
+                    modifier = Modifier.fillMaxWidth(),
                 )
+                OutlinedTextField(
+                    value = newPassword,
+                    onValueChange = { newPassword = it; validationError = null },
+                    label = { Text("Nueva contraseña") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    enabled = !state.isChangingPassword,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = confirmation,
+                    onValueChange = { confirmation = it; validationError = null },
+                    label = { Text("Confirmar nueva contraseña") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    enabled = !state.isChangingPassword,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                (validationError ?: state.passwordError)?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+                Button(
+                    onClick = {
+                        val error = when {
+                            currentPassword.isBlank() -> "Introduce tu contraseña actual."
+                            newPassword.trim().length < 8 -> "La nueva contraseña debe tener al menos 8 caracteres."
+                            newPassword != confirmation -> "La nueva contraseña y su confirmación no coinciden."
+                            else -> null
+                        }
+                        validationError = error
+                        if (error == null) onChangePassword(currentPassword, newPassword)
+                    },
+                    enabled = !state.isChangingPassword,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (state.isChangingPassword) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("Guardar y cerrar sesiones")
+                    }
+                }
             }
         }
 
