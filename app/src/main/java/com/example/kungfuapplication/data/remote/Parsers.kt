@@ -3,6 +3,9 @@ package com.example.kungfuapplication.data.remote
 import com.example.kungfuapplication.data.model.Attendees
 import com.example.kungfuapplication.data.model.CalendarEvent
 import com.example.kungfuapplication.data.model.CancellationNotification
+import com.example.kungfuapplication.data.model.EventNotifications
+import com.example.kungfuapplication.data.model.EventRequest
+import com.example.kungfuapplication.data.model.EventResponseNotice
 import com.example.kungfuapplication.data.model.Course
 import com.example.kungfuapplication.data.model.CourseType
 import com.example.kungfuapplication.data.model.EventPayload
@@ -161,6 +164,8 @@ fun parseEvent(json: JsonObject): CalendarEvent {
             MyParticipation(role = participationRole(it.str("rol")), series = it.bool("serie") ?: false)
         },
         description = json.str("descripcion"),
+        pending = json.str("estado_instructor") == "PENDIENTE",
+        canModify = json.bool("puede_modificar") ?: false,
     )
 }
 
@@ -170,6 +175,31 @@ fun parseCancellationNotification(json: JsonObject) = CancellationNotification(
     start = json.dateTime("fecha_hora") ?: error("Aviso de cancelación sin fecha"),
     end = json.dateTime("fecha_hora_fin") ?: error("Aviso de cancelación sin hora de fin"),
     roomName = json.str("sala_nombre"),
+)
+
+fun parseEventNotifications(json: JsonObject) = EventNotifications(
+    requests = json.objects("requests").map {
+        EventRequest(
+            eventId = it.long("id_curso_agendado") ?: error("Solicitud sin actividad"),
+            courseName = it.str("curso_nombre").orEmpty(),
+            start = it.dateTime("fecha_hora") ?: error("Solicitud sin fecha"),
+            end = it.dateTime("fecha_hora_fin") ?: error("Solicitud sin hora de fin"),
+            roomName = it.str("sala_nombre"),
+            description = it.str("descripcion"),
+            organizerName = it.str("organizador_nombre"),
+        )
+    },
+    responses = json.objects("responses").map {
+        EventResponseNotice(
+            id = it.long("id_aviso") ?: error("Respuesta sin identificador"),
+            accepted = it.str("decision") == "ACEPTADO",
+            courseName = it.str("curso_nombre").orEmpty(),
+            instructorName = it.str("instructor_nombre").orEmpty(),
+            start = it.dateTime("fecha_hora") ?: error("Respuesta sin fecha"),
+            end = it.dateTime("fecha_hora_fin") ?: error("Respuesta sin hora de fin"),
+            roomName = it.str("sala_nombre"),
+        )
+    },
 )
 
 fun parsePromotionNotification(json: JsonObject) = PromotionNotification(
@@ -217,6 +247,7 @@ fun parseRule(json: JsonObject) = RecurringRule(
     active = json.bool("activo") ?: true,
     participantLimit = json.int("limite_participantes"),
     showAttendeeCount = json.bool("mostrar_asistentes") ?: true,
+    canModify = json.bool("puede_modificar") ?: false,
 )
 
 fun parseParticipant(json: JsonObject) = Participant(

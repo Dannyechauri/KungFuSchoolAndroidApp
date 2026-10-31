@@ -119,6 +119,65 @@ fun CalendarScreen(user: SessionUser, viewModel: AppViewModel, onOpenEvent: (Lon
                 }
             }
         }
+        state.eventNotificationError?.let { error ->
+            item { Text("No se pudieron cargar las solicitudes: $error", color = MaterialTheme.colorScheme.error) }
+        }
+        items(state.eventNotifications.requests, key = { "event-request-${it.eventId}" }) { request ->
+            val busy = request.eventId in state.busyEventRequestIds
+            androidx.compose.material3.ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Solicitud como instructor", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    Text(request.courseName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "${request.start.toLocalDate().formatFullDay()} · ${request.start.toLocalTime().formatTime()}–${request.end.toLocalTime().formatTime()} · ${request.roomName ?: "Sala sin asignar"}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        "${request.organizerName ?: "La administración"} te ha asignado esta actividad. Los alumnos no la verán hasta que la aceptes; si la rechazas, se eliminará y se avisará a quien la creó.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    request.description?.takeIf(String::isNotBlank)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Button(onClick = { viewModel.respondToEventRequest(request.eventId, true) }, enabled = !busy, modifier = Modifier.weight(1f)) {
+                            Text("Aceptar")
+                        }
+                        TextButton(onClick = { viewModel.respondToEventRequest(request.eventId, false) }, enabled = !busy, modifier = Modifier.weight(1f)) {
+                            Text("Rechazar", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            }
+        }
+        items(state.eventNotifications.responses, key = { "event-response-${it.id}" }) { notice ->
+            androidx.compose.material3.ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (notice.accepted) "Actividad aceptada" else "Actividad rechazada",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (notice.accepted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    )
+                    Text(notice.courseName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "${notice.start.toLocalDate().formatFullDay()} · ${notice.start.toLocalTime().formatTime()}–${notice.end.toLocalTime().formatTime()} · ${notice.roomName ?: "Sala sin asignar"}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        if (notice.accepted) "${notice.instructorName} ha aceptado la actividad y ya es visible para los alumnos."
+                        else "${notice.instructorName} ha rechazado la actividad y se ha eliminado.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Button(
+                        onClick = { viewModel.acknowledgeEventResponse(notice.id) },
+                        enabled = notice.id !in state.acknowledgingEventResponseIds,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (notice.id in state.acknowledgingEventResponseIds) "Confirmando…" else "Confirmar que lo vi")
+                    }
+                }
+            }
+        }
         state.error?.let { error ->
             item { Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
         }

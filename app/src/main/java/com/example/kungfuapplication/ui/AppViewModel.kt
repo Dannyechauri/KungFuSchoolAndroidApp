@@ -7,6 +7,7 @@ import com.example.kungfuapplication.data.AppSettings
 import com.example.kungfuapplication.data.SchoolRepository
 import com.example.kungfuapplication.data.model.CalendarEvent
 import com.example.kungfuapplication.data.model.CancellationNotification
+import com.example.kungfuapplication.data.model.EventNotifications
 import com.example.kungfuapplication.data.model.Course
 import com.example.kungfuapplication.data.model.EventPayload
 import com.example.kungfuapplication.data.model.InstructorOption
@@ -122,6 +123,10 @@ data class CalendarUiState(
     val cancellationNotifications: List<CancellationNotification> = emptyList(),
     val cancellationNotificationError: String? = null,
     val acknowledgingCancellationIds: Set<Long> = emptySet(),
+    val eventNotifications: EventNotifications = EventNotifications(emptyList(), emptyList()),
+    val eventNotificationError: String? = null,
+    val busyEventRequestIds: Set<Long> = emptySet(),
+    val acknowledgingEventResponseIds: Set<Long> = emptySet(),
 ) {
     fun findEvent(id: Long): CalendarEvent? =
         weekEvents.firstOrNull { it.id == id } ?: upcoming.firstOrNull { it.id == id }
@@ -302,6 +307,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val profileJob = if (user.hasProfile) async { loadProfile() } else null
         val promotionNotificationsJob = if (user.hasProfile) async { refreshPromotionNotifications() } else null
         val cancellationNotificationsJob = if (user.canParticipate) async { refreshCancellationNotifications() } else null
+        val eventNotificationsJob = async { refreshEventNotifications() }
         val roomsJob = async { loadRooms() }
         val performanceJob = async {
             if (_performance.value.loaded) loadPerformanceData() else refreshPerformanceRequests()
@@ -310,6 +316,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         profileJob?.await()
         promotionNotificationsJob?.await()
         cancellationNotificationsJob?.await()
+        eventNotificationsJob.await()
         roomsJob.await()
         performanceJob.await()
     }
@@ -318,8 +325,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val user = currentUser ?: return@coroutineScope
         val promotionJob = if (user.hasProfile) async { refreshPromotionNotifications() } else null
         val cancellationJob = if (user.canParticipate) async { refreshCancellationNotifications() } else null
+        val eventNotificationsJob = async { refreshEventNotifications() }
         promotionJob?.await()
         cancellationJob?.await()
+        eventNotificationsJob.await()
     }
 
     private suspend fun refreshPromotionNotifications() {
@@ -339,6 +348,55 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: Exception) {
             val message = handleError(e) ?: return
             _calendar.update { it.copy(cancellationNotificationError = message) }
+        }
+    }
+
+    private suspend fun refreshEventNotifications() {
+        try {
+            val notices = repository.eventNotifications()
+            _calendar.update { it.copy(eventNotifications = notices, eventNotificationError = null) }
+        } catch (e: Exception) {
+            val message = handleError(e) ?: return
+            _calendar.update { it.copy(eventNotificationError = message) }
+        }
+    }
+
+    fun respondToEventRequest(eventId: Long, accepted: Boolean) {
+        if (eventId in _calendar.value.busyEventRequestIds) return
+        _calendar.update { it.copy(busyEventRequestIds = it.busyEventRequestIds + eventId) }
+        viewModelScope.launch {
+            try {
+                repository.respondToEventRequest(eventId, accepted)
+                refreshEventNotifications()
+                loadEvents()
+                _messages.send(if (accepted) "Actividad aceptada." else "Actividad rechazada y eliminada.")
+            } catch (e: Exception) {
+                handleError(e)?.let { message -> _calendar.update { it.copy(eventNotificationError = message) } }
+            } finally {
+                _calendar.update { it.copy(busyEventRequestIds = it.busyEventRequestIds - eventId) }
+            }
+        }
+    }
+
+    fun acknowledgeEventResponse(noticeId: Long) {
+        if (noticeId in _calendar.value.acknowledgingEventResponseIds) return
+        _calendar.update { it.copy(acknowledgingEventResponseIds = it.acknowledgingEventResponseIds + noticeId) }
+        viewModelScope.launch {
+            try {
+                repository.acknowledgeEventResponse(noticeId)
+                _calendar.update { state ->
+                    state.copy(
+                        eventNotifications = state.eventNotifications.copy(
+                            responses = state.eventNotifications.responses.filterNot { it.id == noticeId },
+                        ),
+                        eventNotificationError = null,
+                    )
+                }
+            } catch (e: Exception) {
+                handleError(e)?.let { message -> _calendar.update { it.copy(eventNotificationError = message) } }
+            } finally {
+                _calendar.update { it.copy(acknowledgingEventResponseIds = it.acknowledgingEventResponseIds - noticeId) }
+            }
         }
     }
 

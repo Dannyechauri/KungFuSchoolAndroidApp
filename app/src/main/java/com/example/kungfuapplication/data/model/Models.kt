@@ -148,6 +148,8 @@ data class CalendarEvent(
     val full: Boolean,
     val myParticipation: MyParticipation?,
     val description: String? = null,
+    val pending: Boolean = false,
+    val canModify: Boolean = false,
 ) {
     val isRecurring: Boolean get() = recurringRuleId != null
     fun hasStarted(now: LocalDateTime): Boolean = !start.isAfter(now)
@@ -160,6 +162,30 @@ data class CancellationNotification(
     val end: LocalDateTime,
     val roomName: String?,
 )
+
+data class EventRequest(
+    val eventId: Long,
+    val courseName: String,
+    val start: LocalDateTime,
+    val end: LocalDateTime,
+    val roomName: String?,
+    val description: String?,
+    val organizerName: String?,
+)
+
+data class EventResponseNotice(
+    val id: Long,
+    val accepted: Boolean,
+    val courseName: String,
+    val instructorName: String,
+    val start: LocalDateTime,
+    val end: LocalDateTime,
+    val roomName: String?,
+)
+
+data class EventNotifications(val requests: List<EventRequest>, val responses: List<EventResponseNotice>) {
+    val count: Int get() = requests.size + responses.size
+}
 
 data class Room(val id: Long, val name: String, val active: Boolean)
 
@@ -190,6 +216,7 @@ data class RecurringRule(
     val active: Boolean,
     val participantLimit: Int?,
     val showAttendeeCount: Boolean,
+    val canModify: Boolean = false,
 )
 
 data class Participant(

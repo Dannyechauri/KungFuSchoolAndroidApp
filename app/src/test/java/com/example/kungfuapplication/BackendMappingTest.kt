@@ -22,6 +22,7 @@ import com.example.kungfuapplication.data.model.myParticipationText
 import com.example.kungfuapplication.data.model.state
 import com.example.kungfuapplication.data.remote.parseEvent
 import com.example.kungfuapplication.data.remote.parseCancellationNotification
+import com.example.kungfuapplication.data.remote.parseEventNotifications
 import com.example.kungfuapplication.data.remote.parseProfile
 import com.example.kungfuapplication.data.remote.parsePromotionNotification
 import com.example.kungfuapplication.data.remote.parseRule
@@ -155,6 +156,34 @@ class BackendMappingTest {
         assertEquals(9L, promotion.id)
         assertEquals("Cinta Verde", promotion.previousGrade)
         assertEquals("Cinta Azul", promotion.newGrade)
+    }
+
+    @Test
+    fun parsesInstructorRequestsAndOrganizerResponses() {
+        val notices = parseEventNotifications(json("""{
+            "requests":[{"id_curso_agendado":"21","curso_nombre":"Taolu",
+                "fecha_hora":"2026-10-30T18:00:00","fecha_hora_fin":"2026-10-30T19:00:00",
+                "sala_nombre":"Sala Principal","descripcion":null,"organizador_nombre":"Administración"}],
+            "responses":[{"id_aviso":"7","decision":"RECHAZADO","curso_nombre":"Seminario",
+                "instructor_nombre":"Chen Wei","fecha_hora":"2026-10-31T10:00:00",
+                "fecha_hora_fin":"2026-10-31T12:00:00","sala_nombre":null}]
+        }"""))
+        assertEquals(21L, notices.requests.single().eventId)
+        assertEquals("Administración", notices.requests.single().organizerName)
+        assertEquals(7L, notices.responses.single().id)
+        assertFalse(notices.responses.single().accepted)
+        assertEquals("Chen Wei", notices.responses.single().instructorName)
+        assertEquals(2, notices.count)
+    }
+
+    @Test
+    fun eventKeepsPendingStateAndEditPermission() {
+        val pending = parseEvent(json("""{"id_curso_agendado":1,"id_curso":1,"fecha_hora":"2026-05-04T18:00:00",
+            "estado_instructor":"PENDIENTE","puede_modificar":true}"""))
+        val published = parseEvent(json("""{"id_curso_agendado":2,"id_curso":1,"fecha_hora":"2026-05-04T18:00:00",
+            "estado_instructor":"ACEPTADO"}"""))
+        assertTrue(pending.pending && pending.canModify)
+        assertFalse(published.pending || published.canModify)
     }
 
     @Test

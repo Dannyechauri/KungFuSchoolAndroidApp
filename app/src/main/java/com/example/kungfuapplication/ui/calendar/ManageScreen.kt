@@ -217,7 +217,7 @@ private fun RuleRow(rule: RecurringRule, enabled: Boolean, onEdit: () -> Unit, o
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onEdit)
+            .clickable(enabled = enabled && rule.canModify, onClick = onEdit)
             .padding(start = 16.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -239,8 +239,12 @@ private fun RuleRow(rule: RecurringRule, enabled: Boolean, onEdit: () -> Unit, o
                 Text(extras.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
             }
         }
-        IconButton(onClick = onCancel, enabled = enabled) {
-            Icon(Icons.Filled.Delete, contentDescription = "Cancelar horario", tint = MaterialTheme.colorScheme.error)
+        if (rule.canModify) {
+            IconButton(onClick = onCancel, enabled = enabled) {
+                Icon(Icons.Filled.Delete, contentDescription = "Cancelar horario", tint = MaterialTheme.colorScheme.error)
+            }
+        } else {
+            Spacer(Modifier.width(16.dp))
         }
     }
 }

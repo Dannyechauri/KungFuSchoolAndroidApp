@@ -128,6 +128,7 @@ private fun MainScaffold(viewModel: AppViewModel, user: SessionUser) {
     val performance by viewModel.performance.collectAsStateWithLifecycle()
     val pendingCount = if (user.canParticipate) performance.inbox.size else 0
     val cancellationCount = if (user.canParticipate) calendar.cancellationNotifications.size else 0
+    val calendarNoticeCount = cancellationCount + calendar.eventNotifications.count
     val promotionCount = if (user.hasProfile) profile.promotionNotifications.size else 0
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -187,13 +188,13 @@ private fun MainScaffold(viewModel: AppViewModel, user: SessionUser) {
                 NavigationBar {
                     tabs.forEach { tab ->
                         val badgeCount = when (tab) {
-                            Tab.Calendar -> cancellationCount
+                            Tab.Calendar -> calendarNoticeCount
                             Tab.Profile -> promotionCount
                             Tab.Performance -> pendingCount
                             else -> 0
                         }
                         val badgeLabel = when (tab) {
-                            Tab.Calendar -> "avisos de cancelación pendientes"
+                            Tab.Calendar -> "avisos de calendario pendientes"
                             Tab.Profile -> "avisos de ascenso pendientes"
                             else -> "actividades pendientes de confirmar o rechazar"
                         }

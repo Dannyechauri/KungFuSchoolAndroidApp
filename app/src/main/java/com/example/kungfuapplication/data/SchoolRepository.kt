@@ -2,6 +2,7 @@ package com.example.kungfuapplication.data
 
 import com.example.kungfuapplication.data.model.CalendarEvent
 import com.example.kungfuapplication.data.model.CancellationNotification
+import com.example.kungfuapplication.data.model.EventNotifications
 import com.example.kungfuapplication.data.model.Course
 import com.example.kungfuapplication.data.model.EventPayload
 import com.example.kungfuapplication.data.model.InstructorOption
@@ -23,6 +24,7 @@ import com.example.kungfuapplication.data.remote.asObject
 import com.example.kungfuapplication.data.remote.parseCourse
 import com.example.kungfuapplication.data.remote.parseEvent
 import com.example.kungfuapplication.data.remote.parseCancellationNotification
+import com.example.kungfuapplication.data.remote.parseEventNotifications
 import com.example.kungfuapplication.data.remote.parseInstructor
 import com.example.kungfuapplication.data.remote.parseJoinResult
 import com.example.kungfuapplication.data.remote.parseParticipant
@@ -103,6 +105,19 @@ class SchoolRepository(
 
     suspend fun acknowledgeCancellationNotification(id: Long) {
         api.post("/api/calendar/cancellation-notifications/$id/acknowledge")
+    }
+
+    suspend fun eventNotifications(): EventNotifications =
+        parseEventNotifications(api.get("/api/calendar/event-notifications").asObject())
+
+    suspend fun respondToEventRequest(eventId: Long, accepted: Boolean) {
+        api.post("/api/calendar/event-requests/$eventId/respond", buildJsonObject {
+            put("decision", if (accepted) "ACEPTADO" else "RECHAZADO")
+        })
+    }
+
+    suspend fun acknowledgeEventResponse(id: Long) {
+        api.post("/api/calendar/event-notifications/$id/acknowledge")
     }
 
     suspend fun promotionNotifications(): List<PromotionNotification> =

@@ -106,7 +106,7 @@ fun EventDetailScreen(
             onJoin = { scope, role -> viewModel.join(event, scope, role) },
             onLeave = { scope -> viewModel.leave(event, scope) },
         )
-        if (user.canManageCalendar && event.active) {
+        if (user.canManageCalendar && event.canModify && event.active) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { onEditEvent(event.id) }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -135,6 +135,7 @@ private fun EventHeader(event: CalendarEvent) {
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (!event.active) StatusPill("Cancelada", PillTone.Danger)
+            if (event.active && event.pending) StatusPill("Pendiente del instructor", PillTone.Neutral)
             if (event.active && event.full) StatusPill("Completo", PillTone.Danger)
             StatusPill(if (event.courseType == CourseType.CURSO_ESPECIAL) "Curso especial" else "Clase habitual", PillTone.Neutral)
             if (event.myParticipation != null && event.active) StatusPill("Apuntado", PillTone.Primary)
