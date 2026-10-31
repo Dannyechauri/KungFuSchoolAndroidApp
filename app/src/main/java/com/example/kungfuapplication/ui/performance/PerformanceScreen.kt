@@ -46,6 +46,7 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -263,16 +264,24 @@ private fun PerformanceSessionForm(user: SessionUser, state: PerformanceUiState,
     var epochDay by rememberSaveable(user.userId) { mutableLongStateOf(schoolToday().toEpochDay()) }
     val date = LocalDate.ofEpochDay(epochDay)
     val existing = state.records.firstOrNull { it.date == date && it.studentId == user.studentId }
-    var physical by rememberSaveable(user.userId, epochDay) { mutableStateOf(existing?.physicalWork ?: false) }
-    var cardio by rememberSaveable(user.userId, epochDay) { mutableStateOf(existing?.cardioWork ?: false) }
-    var stretching by rememberSaveable(user.userId, epochDay) { mutableStateOf(existing?.stretching ?: false) }
-    var attendance by rememberSaveable(user.userId, epochDay) { mutableStateOf(existing?.attendedClass ?: false) }
-    var formIds by rememberSaveable(user.userId, epochDay) { mutableStateOf(existing?.forms?.map { it.id }.orEmpty()) }
-    var confirmerIds by rememberSaveable(user.userId, epochDay) {
-        mutableStateOf(existing?.confirmations?.map { it.studentId }
-            ?.filter { id -> state.confirmers.any { it.id == id } }.orEmpty())
-    }
+    var physical by rememberSaveable(user.userId) { mutableStateOf(false) }
+    var cardio by rememberSaveable(user.userId) { mutableStateOf(false) }
+    var stretching by rememberSaveable(user.userId) { mutableStateOf(false) }
+    var attendance by rememberSaveable(user.userId) { mutableStateOf(false) }
+    var formIds by rememberSaveable(user.userId) { mutableStateOf(emptyList<Long>()) }
+    var confirmerIds by rememberSaveable(user.userId) { mutableStateOf(emptyList<Long>()) }
     var datePickerOpen by rememberSaveable { mutableStateOf(false) }
+    var seenSaves by rememberSaveable { mutableIntStateOf(state.savedCount) }
+    LaunchedEffect(state.savedCount) {
+        if (state.savedCount == seenSaves) return@LaunchedEffect
+        seenSaves = state.savedCount
+        physical = false
+        cardio = false
+        stretching = false
+        attendance = false
+        formIds = emptyList()
+        confirmerIds = emptyList()
+    }
     var picker by rememberSaveable { mutableStateOf<String?>(null) }
     val enabled = !state.isSaving
     LazyColumn(

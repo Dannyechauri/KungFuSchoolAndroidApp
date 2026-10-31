@@ -106,6 +106,7 @@ data class PerformanceUiState(
     val error: String? = null,
     val requestsError: String? = null,
     val formError: String? = null,
+    val savedCount: Int = 0,
 )
 
 data class CalendarUiState(
@@ -500,6 +501,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 repository.savePerformance(payload)
                 if (session != performanceSession) return@launch
+                _performance.update { it.copy(savedCount = it.savedCount + 1) }
                 loadPerformanceData()
                 _messages.send("Desempeño guardado. Se han enviado las solicitudes de confirmación.")
             } catch (e: Exception) {
