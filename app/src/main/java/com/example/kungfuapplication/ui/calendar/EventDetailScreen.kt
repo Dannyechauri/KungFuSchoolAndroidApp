@@ -17,14 +17,19 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.EventBusy
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
@@ -33,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -71,6 +77,7 @@ fun EventDetailScreen(
     viewModel: AppViewModel,
     onEditEvent: (Long) -> Unit,
     onEditRule: (Long) -> Unit,
+    onDeleted: () -> Unit,
 ) {
     val calendar by viewModel.calendar.collectAsStateWithLifecycle()
     val participants by viewModel.participants.collectAsStateWithLifecycle()
@@ -122,6 +129,40 @@ fun EventDetailScreen(
                 }
             }
         }
+        if (user.isAdmin && !event.active) {
+            DeleteEventButton(
+                busy = event.id in calendar.busyEventIds,
+                onConfirm = { viewModel.deleteEvent(event.id, onDeleted) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun DeleteEventButton(busy: Boolean, onConfirm: () -> Unit) {
+    var confirming by rememberSaveable { mutableStateOf(false) }
+    OutlinedButton(
+        onClick = { confirming = true },
+        enabled = !busy,
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Eliminar actividad")
+    }
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text("Eliminar actividad") },
+            text = { Text("Se eliminará definitivamente esta actividad cancelada. Esta acción no se puede deshacer.") },
+            confirmButton = {
+                TextButton(onClick = { confirming = false; onConfirm() }) {
+                    Text("Eliminar", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirming = false }) { Text("Volver") } },
+        )
     }
 }
 
@@ -157,18 +198,23 @@ private fun EventInfo(event: CalendarEvent) {
                 else -> "Sesión puntual"
             }
             InfoLine(Icons.Filled.Repeat, "Origen", origin)
-            event.description?.takeIf(String::isNotBlank)?.let {
+            val sessionDescription = event.description?.takeIf(String::isNotBlank)
+            val courseDescription = event.courseDescription?.takeIf(String::isNotBlank)
+            if (sessionDescription != null || courseDescription != null) {
                 HorizontalDivider()
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Descripción de la sesión", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                    Text(it, style = MaterialTheme.typography.bodyMedium)
+                var expanded by rememberSaveable(event.id) { mutableStateOf(false) }
+                OutlinedButton(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Descripción", modifier = Modifier.weight(1f))
+                    Icon(
+                        if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription = if (expanded) "Ocultar descripción" else "Mostrar descripción",
+                    )
                 }
-            }
-            event.courseDescription?.takeIf(String::isNotBlank)?.let {
-                HorizontalDivider()
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Descripción del curso", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                    Text(it, style = MaterialTheme.typography.bodyMedium)
+                if (expanded) {
+                    sessionDescription?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                    courseDescription?.let {
+                        Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }

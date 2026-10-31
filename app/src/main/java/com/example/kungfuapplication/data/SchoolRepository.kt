@@ -177,6 +177,10 @@ class SchoolRepository(
         api.post("/api/calendar/events/$eventId/cancel")
     }
 
+    suspend fun deleteEvent(eventId: Long) {
+        api.delete("/api/calendar/events/$eventId")
+    }
+
     suspend fun createRule(payload: RulePayload) {
         api.post("/api/calendar/recurring-rules", payload.toJson())
     }

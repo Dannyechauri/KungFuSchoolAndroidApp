@@ -314,6 +314,7 @@ private fun AppNavHost(
                 viewModel = viewModel,
                 onEditEvent = { navController.openSchedule(ScheduleTarget.EVENT_EDIT, id = it) },
                 onEditRule = { navController.openSchedule(ScheduleTarget.RULE_EDIT, id = it) },
+                onDeleted = { navController.popBackStack() },
             )
         }
         composable(

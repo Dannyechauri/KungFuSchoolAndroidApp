@@ -749,6 +749,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         "Sesión cancelada. Seguirá visible como cancelada."
     }
 
+    fun deleteEvent(eventId: Long, onDeleted: () -> Unit) {
+        _calendar.update { it.copy(busyEventIds = it.busyEventIds + eventId) }
+        viewModelScope.launch {
+            try {
+                repository.deleteEvent(eventId)
+                _participants.update { it - eventId }
+                loadEvents()
+                onDeleted()
+                _messages.send("Actividad eliminada.")
+            } catch (e: Exception) {
+                handleError(e)?.let { _messages.send(it) }
+            } finally {
+                _calendar.update { it.copy(busyEventIds = it.busyEventIds - eventId) }
+            }
+        }
+    }
+
     fun saveRule(ruleId: Long?, payload: RulePayload, onDone: () -> Unit) = manageAction(onDone) {
         if (ruleId == null) {
             repository.createRule(payload)
