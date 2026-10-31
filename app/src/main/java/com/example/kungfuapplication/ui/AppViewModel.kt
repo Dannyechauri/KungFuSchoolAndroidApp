@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.kungfuapplication.data.AppSettings
 import com.example.kungfuapplication.data.SchoolRepository
 import com.example.kungfuapplication.data.model.CalendarEvent
+import com.example.kungfuapplication.data.model.CancellationNotification
 import com.example.kungfuapplication.data.model.Course
 import com.example.kungfuapplication.data.model.EventPayload
 import com.example.kungfuapplication.data.model.InstructorOption
@@ -24,6 +25,7 @@ import com.example.kungfuapplication.data.model.PerformancePayload
 import com.example.kungfuapplication.data.model.PerformanceRankings
 import com.example.kungfuapplication.data.model.PerformanceRecord
 import com.example.kungfuapplication.data.model.PerformanceRequest
+import com.example.kungfuapplication.data.model.PromotionNotification
 import com.example.kungfuapplication.data.model.calendarErrorText
 import com.example.kungfuapplication.data.model.joinMessage
 import com.example.kungfuapplication.data.model.leaveMessage
@@ -77,6 +79,9 @@ data class ProfileUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val pendingFormIds: Set<Long> = emptySet(),
+    val promotionNotifications: List<PromotionNotification> = emptyList(),
+    val promotionNotificationError: String? = null,
+    val acknowledgingPromotionIds: Set<Long> = emptySet(),
 )
 
 enum class CalendarMode { WEEK, LIST }
@@ -108,6 +113,9 @@ data class CalendarUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val busyEventIds: Set<Long> = emptySet(),
+    val cancellationNotifications: List<CancellationNotification> = emptyList(),
+    val cancellationNotificationError: String? = null,
+    val acknowledgingCancellationIds: Set<Long> = emptySet(),
 ) {
     fun findEvent(id: Long): CalendarEvent? =
         weekEvents.firstOrNull { it.id == id } ?: upcoming.firstOrNull { it.id == id }
@@ -261,14 +269,82 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun loadAll(user: SessionUser) = coroutineScope {
         val profileJob = if (user.hasProfile) async { loadProfile() } else null
+        val promotionNotificationsJob = if (user.hasProfile) async { refreshPromotionNotifications() } else null
+        val cancellationNotificationsJob = if (user.canParticipate) async { refreshCancellationNotifications() } else null
         val roomsJob = async { loadRooms() }
         val performanceJob = async {
             if (_performance.value.loaded) loadPerformanceData() else refreshPerformanceRequests()
         }
         loadEvents()
         profileJob?.await()
+        promotionNotificationsJob?.await()
+        cancellationNotificationsJob?.await()
         roomsJob.await()
         performanceJob.await()
+    }
+
+    suspend fun refreshNotifications() = coroutineScope {
+        val user = currentUser ?: return@coroutineScope
+        val promotionJob = if (user.hasProfile) async { refreshPromotionNotifications() } else null
+        val cancellationJob = if (user.canParticipate) async { refreshCancellationNotifications() } else null
+        promotionJob?.await()
+        cancellationJob?.await()
+    }
+
+    private suspend fun refreshPromotionNotifications() {
+        try {
+            val notices = repository.promotionNotifications()
+            _profile.update { it.copy(promotionNotifications = notices, promotionNotificationError = null) }
+        } catch (e: Exception) {
+            val message = handleError(e) ?: return
+            _profile.update { it.copy(promotionNotificationError = message) }
+        }
+    }
+
+    private suspend fun refreshCancellationNotifications() {
+        try {
+            val notices = repository.cancellationNotifications()
+            _calendar.update { it.copy(cancellationNotifications = notices, cancellationNotificationError = null) }
+        } catch (e: Exception) {
+            val message = handleError(e) ?: return
+            _calendar.update { it.copy(cancellationNotificationError = message) }
+        }
+    }
+
+    fun acknowledgePromotionNotification(noticeId: Long) {
+        if (noticeId in _profile.value.acknowledgingPromotionIds) return
+        _profile.update { it.copy(acknowledgingPromotionIds = it.acknowledgingPromotionIds + noticeId) }
+        viewModelScope.launch {
+            try {
+                repository.acknowledgePromotionNotification(noticeId)
+                _profile.update { state -> state.copy(
+                    promotionNotifications = state.promotionNotifications.filterNot { it.id == noticeId },
+                    promotionNotificationError = null,
+                ) }
+            } catch (e: Exception) {
+                handleError(e)?.let { message -> _profile.update { it.copy(promotionNotificationError = message) } }
+            } finally {
+                _profile.update { it.copy(acknowledgingPromotionIds = it.acknowledgingPromotionIds - noticeId) }
+            }
+        }
+    }
+
+    fun acknowledgeCancellationNotification(noticeId: Long) {
+        if (noticeId in _calendar.value.acknowledgingCancellationIds) return
+        _calendar.update { it.copy(acknowledgingCancellationIds = it.acknowledgingCancellationIds + noticeId) }
+        viewModelScope.launch {
+            try {
+                repository.acknowledgeCancellationNotification(noticeId)
+                _calendar.update { state -> state.copy(
+                    cancellationNotifications = state.cancellationNotifications.filterNot { it.id == noticeId },
+                    cancellationNotificationError = null,
+                ) }
+            } catch (e: Exception) {
+                handleError(e)?.let { message -> _calendar.update { it.copy(cancellationNotificationError = message) } }
+            } finally {
+                _calendar.update { it.copy(acknowledgingCancellationIds = it.acknowledgingCancellationIds - noticeId) }
+            }
+        }
     }
 
     suspend fun refreshPerformanceRequests() {

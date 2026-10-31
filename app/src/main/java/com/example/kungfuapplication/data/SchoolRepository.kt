@@ -1,6 +1,7 @@
 package com.example.kungfuapplication.data
 
 import com.example.kungfuapplication.data.model.CalendarEvent
+import com.example.kungfuapplication.data.model.CancellationNotification
 import com.example.kungfuapplication.data.model.Course
 import com.example.kungfuapplication.data.model.EventPayload
 import com.example.kungfuapplication.data.model.InstructorOption
@@ -14,16 +15,19 @@ import com.example.kungfuapplication.data.model.Room
 import com.example.kungfuapplication.data.model.RulePayload
 import com.example.kungfuapplication.data.model.SessionUser
 import com.example.kungfuapplication.data.model.PerformanceDecision
+import com.example.kungfuapplication.data.model.PromotionNotification
 import com.example.kungfuapplication.data.model.PerformancePayload
 import com.example.kungfuapplication.data.remote.ApiClient
 import com.example.kungfuapplication.data.remote.ApiException
 import com.example.kungfuapplication.data.remote.asObject
 import com.example.kungfuapplication.data.remote.parseCourse
 import com.example.kungfuapplication.data.remote.parseEvent
+import com.example.kungfuapplication.data.remote.parseCancellationNotification
 import com.example.kungfuapplication.data.remote.parseInstructor
 import com.example.kungfuapplication.data.remote.parseJoinResult
 import com.example.kungfuapplication.data.remote.parseParticipant
 import com.example.kungfuapplication.data.remote.parseProfile
+import com.example.kungfuapplication.data.remote.parsePromotionNotification
 import com.example.kungfuapplication.data.remote.parseRoom
 import com.example.kungfuapplication.data.remote.parseRule
 import com.example.kungfuapplication.data.remote.parseSessionUser
@@ -83,6 +87,20 @@ class SchoolRepository(
     // ---------- Mi ficha ----------
 
     suspend fun profile(): MyProfile = parseProfile(api.get("/api/me/profile").asObject())
+
+    suspend fun cancellationNotifications(): List<CancellationNotification> =
+        api.getArray("/api/calendar/cancellation-notifications").map(::parseCancellationNotification)
+
+    suspend fun acknowledgeCancellationNotification(id: Long) {
+        api.post("/api/calendar/cancellation-notifications/$id/acknowledge")
+    }
+
+    suspend fun promotionNotifications(): List<PromotionNotification> =
+        api.getArray("/api/me/promotions").map(::parsePromotionNotification)
+
+    suspend fun acknowledgePromotionNotification(id: Long) {
+        api.post("/api/me/promotions/$id/acknowledge")
+    }
 
     suspend fun saveFormProgress(formId: Long, percent: Int) {
         api.put("/api/me/forms/$formId/progress", buildJsonObject { put("percent", percent) })

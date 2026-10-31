@@ -2,6 +2,7 @@ package com.example.kungfuapplication.data.remote
 
 import com.example.kungfuapplication.data.model.Attendees
 import com.example.kungfuapplication.data.model.CalendarEvent
+import com.example.kungfuapplication.data.model.CancellationNotification
 import com.example.kungfuapplication.data.model.Course
 import com.example.kungfuapplication.data.model.CourseType
 import com.example.kungfuapplication.data.model.EventPayload
@@ -31,6 +32,7 @@ import com.example.kungfuapplication.data.model.PerformancePayload
 import com.example.kungfuapplication.data.model.PerformanceRankings
 import com.example.kungfuapplication.data.model.PerformanceRecord
 import com.example.kungfuapplication.data.model.PerformanceRequest
+import com.example.kungfuapplication.data.model.PromotionNotification
 import com.example.kungfuapplication.data.model.RankingCategory
 import com.example.kungfuapplication.data.model.RankingEntry
 import kotlinx.serialization.json.JsonArray
@@ -158,8 +160,23 @@ fun parseEvent(json: JsonObject): CalendarEvent {
         myParticipation = json.obj("mi_participacion")?.let {
             MyParticipation(role = participationRole(it.str("rol")), series = it.bool("serie") ?: false)
         },
+        description = json.str("descripcion"),
     )
 }
+
+fun parseCancellationNotification(json: JsonObject) = CancellationNotification(
+    id = json.long("id_aviso") ?: error("Aviso de cancelación sin identificador"),
+    courseName = json.str("curso_nombre").orEmpty(),
+    start = json.dateTime("fecha_hora") ?: error("Aviso de cancelación sin fecha"),
+    end = json.dateTime("fecha_hora_fin") ?: error("Aviso de cancelación sin hora de fin"),
+    roomName = json.str("sala_nombre"),
+)
+
+fun parsePromotionNotification(json: JsonObject) = PromotionNotification(
+    id = json.long("id_aviso") ?: error("Aviso de ascenso sin identificador"),
+    previousGrade = json.str("grado_anterior").orEmpty(),
+    newGrade = json.str("grado_nuevo").orEmpty(),
+)
 
 fun parseRoom(json: JsonObject) = Room(
     id = json.long("id_sala") ?: 0,
@@ -228,6 +245,7 @@ fun EventPayload.toJson(): JsonObject = buildJsonObject {
     put("roomId", roomId)
     put("startAt", startAt.toApiDateTime())
     put("endAt", endAt.toApiDateTime())
+    if (description == null) put("description", JsonNull) else put("description", description)
     putSettings(settings)
 }
 

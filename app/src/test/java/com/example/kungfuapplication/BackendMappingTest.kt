@@ -21,7 +21,9 @@ import com.example.kungfuapplication.data.model.joinMessage
 import com.example.kungfuapplication.data.model.myParticipationText
 import com.example.kungfuapplication.data.model.state
 import com.example.kungfuapplication.data.remote.parseEvent
+import com.example.kungfuapplication.data.remote.parseCancellationNotification
 import com.example.kungfuapplication.data.remote.parseProfile
+import com.example.kungfuapplication.data.remote.parsePromotionNotification
 import com.example.kungfuapplication.data.remote.parseRule
 import com.example.kungfuapplication.data.remote.parseSessionUser
 import com.example.kungfuapplication.data.remote.toJson
@@ -120,6 +122,7 @@ class BackendMappingTest {
                 {"id_curso_agendado":"42","id_curso":"3","id_instructor":"7","id_sala":"2",
                  "fecha_hora":"2026-05-04T18:00:00","fecha_hora_fin":"2026-05-04T19:30:00","activo":true,
                  "id_horario_recurrente":"9","modificado_manualmente":false,"curso_nombre":"Taolu",
+                 "descripcion":"Sesión abierta a todos los niveles",
                  "tipo_curso":"CURSO_ESPECIAL","limite_participantes":10,"mostrar_asistentes":true,
                  "asistentes":{"alumnos":4,"instructores":1},"completo":false,
                  "mi_participacion":{"rol":"INSTRUCTOR","serie":true}}
@@ -131,9 +134,27 @@ class BackendMappingTest {
         assertEquals(LocalDateTime.of(2026, 5, 4, 19, 30), parsed.end)
         assertTrue(parsed.isRecurring)
         assertEquals(CourseType.CURSO_ESPECIAL, parsed.courseType)
+        assertEquals("Sesión abierta a todos los niveles", parsed.description)
         assertEquals(Attendees(4, 1), parsed.attendees)
         assertEquals(ParticipationRole.INSTRUCTOR, parsed.myParticipation?.role)
         assertEquals("Estás apuntado como instructor a toda la serie.", parsed.myParticipationText())
+    }
+
+    @Test
+    fun parsesCalendarAndPromotionNotifications() {
+        val cancellation = parseCancellationNotification(json("""{
+            "id_aviso":"8","curso_nombre":"Taolu","fecha_hora":"2026-10-30T18:00:00",
+            "fecha_hora_fin":"2026-10-30T19:00:00","sala_nombre":"Sala Principal"
+        }"""))
+        val promotion = parsePromotionNotification(json("""{
+            "id_aviso":"9","grado_anterior":"Cinta Verde","grado_nuevo":"Cinta Azul"
+        }"""))
+        assertEquals(8L, cancellation.id)
+        assertEquals("Taolu", cancellation.courseName)
+        assertEquals("Sala Principal", cancellation.roomName)
+        assertEquals(9L, promotion.id)
+        assertEquals("Cinta Verde", promotion.previousGrade)
+        assertEquals("Cinta Azul", promotion.newGrade)
     }
 
     @Test
@@ -262,12 +283,13 @@ class BackendMappingTest {
             checkEvent(1, null, 1, date, six, seven, null),
         )
         assertEquals(FormCheck.Invalid("El final debe ser posterior al inicio."), checkEvent(1, 1, 1, date, seven, six, null))
-        val valid = checkEvent(1, 2, 3, date, six, seven, ParticipationSettings(null, false))
+        val valid = checkEvent(1, 2, 3, date, six, seven, ParticipationSettings(null, false), "Clase abierta")
         assertTrue(valid is FormCheck.Valid)
         val body = (valid as FormCheck.Valid).payload.toJson()
         assertEquals("2026-05-04T18:00", body["startAt"].toString().trim('"'))
         assertEquals(JsonNull, body["participantLimit"])
         assertEquals("false", body["showAttendeeCount"].toString())
+        assertEquals("\"Clase abierta\"", body["description"].toString())
 
         assertEquals(
             FormCheck.Invalid("Selecciona al menos un día de la semana."),

@@ -156,9 +156,19 @@ private fun EventInfo(event: CalendarEvent) {
                 else -> "Sesión puntual"
             }
             InfoLine(Icons.Filled.Repeat, "Origen", origin)
-            event.courseDescription?.let {
+            event.description?.takeIf(String::isNotBlank)?.let {
                 HorizontalDivider()
-                Text(it, style = MaterialTheme.typography.bodyMedium)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Descripción de la sesión", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    Text(it, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+            event.courseDescription?.takeIf(String::isNotBlank)?.let {
+                HorizontalDivider()
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Descripción del curso", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    Text(it, style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
     }

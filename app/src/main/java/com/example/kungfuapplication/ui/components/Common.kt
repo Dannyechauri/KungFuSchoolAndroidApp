@@ -219,17 +219,24 @@ fun StatusPill(text: String, tone: PillTone = PillTone.Neutral, modifier: Modifi
  * y el borde se resalta cuando el usuario está apuntado.
  */
 @Composable
-fun EventCard(event: CalendarEvent, onClick: () -> Unit, modifier: Modifier = Modifier, showDate: Boolean = false) {
+fun EventCard(
+    event: CalendarEvent,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    showDate: Boolean = false,
+    assignedToCurrentInstructor: Boolean = false,
+) {
     val scheme = MaterialTheme.colorScheme
     val mine = event.myParticipation != null && event.active
+    val highlighted = mine || (event.active && assignedToCurrentInstructor)
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
-        color = if (mine) scheme.primaryContainer.copy(alpha = 0.35f) else scheme.surfaceContainerLow,
-        border = if (mine) BorderStroke(1.5.dp, scheme.primary) else null,
+        color = if (highlighted) scheme.primaryContainer.copy(alpha = 0.45f) else scheme.surfaceContainerLow,
+        border = if (highlighted) BorderStroke(2.dp, scheme.primary) else null,
     ) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(
@@ -277,6 +284,7 @@ fun EventCard(event: CalendarEvent, onClick: () -> Unit, modifier: Modifier = Mo
                     }
                     if (event.courseType == CourseType.CURSO_ESPECIAL) StatusPill("Especial", PillTone.Warning)
                     if (mine) StatusPill("Apuntado", PillTone.Primary)
+                    else if (event.active && assignedToCurrentInstructor) StatusPill("Impartes esta clase", PillTone.Primary)
                 }
             }
             val count = event.shortAttendance()

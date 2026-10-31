@@ -155,7 +155,12 @@ fun ManageScreen(
             }
         } else {
             items(oneOffSessions, key = { "oneoff-${it.id}" }) { event ->
-                EventCard(event = event, onClick = { onOpenEvent(event.id) }, showDate = true)
+                EventCard(
+                    event = event,
+                    onClick = { onOpenEvent(event.id) },
+                    showDate = true,
+                    assignedToCurrentInstructor = user.instructorId != null && event.instructorId == user.instructorId,
+                )
             }
         }
     }

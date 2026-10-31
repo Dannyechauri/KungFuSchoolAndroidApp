@@ -124,14 +124,18 @@ private fun MainScaffold(viewModel: AppViewModel, user: SessionUser) {
     val snackbarHostState = remember { SnackbarHostState() }
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
     val calendar by viewModel.calendar.collectAsStateWithLifecycle()
+    val profile by viewModel.profile.collectAsStateWithLifecycle()
     val performance by viewModel.performance.collectAsStateWithLifecycle()
     val pendingCount = if (user.canParticipate) performance.inbox.size else 0
+    val cancellationCount = if (user.canParticipate) calendar.cancellationNotifications.size else 0
+    val promotionCount = if (user.hasProfile) profile.promotionNotifications.size else 0
     val lifecycleOwner = LocalLifecycleOwner.current
 
     LaunchedEffect(lifecycleOwner, user.userId, user.role) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (isActive) {
                 viewModel.refreshPerformanceRequests()
+                viewModel.refreshNotifications()
                 delay(30_000)
             }
         }
@@ -182,7 +186,18 @@ private fun MainScaffold(viewModel: AppViewModel, user: SessionUser) {
             if (currentTab != null) {
                 NavigationBar {
                     tabs.forEach { tab ->
-                        val hasPending = tab == Tab.Performance && pendingCount > 0
+                        val badgeCount = when (tab) {
+                            Tab.Calendar -> cancellationCount
+                            Tab.Profile -> promotionCount
+                            Tab.Performance -> pendingCount
+                            else -> 0
+                        }
+                        val badgeLabel = when (tab) {
+                            Tab.Calendar -> "avisos de cancelación pendientes"
+                            Tab.Profile -> "avisos de ascenso pendientes"
+                            else -> "actividades pendientes de confirmar o rechazar"
+                        }
+                        val hasPending = badgeCount > 0
                         NavigationBarItem(
                             modifier = Modifier.background(if (hasPending) KungFuGoldContainer else Color.Transparent, RoundedCornerShape(8.dp)),
                             selected = tab == currentTab,
@@ -193,9 +208,9 @@ private fun MainScaffold(viewModel: AppViewModel, user: SessionUser) {
                                         containerColor = MaterialTheme.colorScheme.error,
                                         contentColor = MaterialTheme.colorScheme.onError,
                                         modifier = Modifier.semantics {
-                                            contentDescription = "$pendingCount ${if (pendingCount == 1) "actividad pendiente" else "actividades pendientes"} de confirmar o rechazar"
+                                            contentDescription = "$badgeCount $badgeLabel"
                                         },
-                                    ) { Text(if (pendingCount > 99) "99+" else pendingCount.toString()) }
+                                    ) { Text(if (badgeCount > 99) "99+" else badgeCount.toString()) }
                                 }) {
                                     Icon(tab.icon, contentDescription = null,
                                         tint = if (hasPending) KungFuOnGoldContainer else Color.Unspecified)
@@ -246,7 +261,7 @@ private fun AppNavHost(
     viewModel: AppViewModel,
     isRefreshing: Boolean,
 ) {
-    NavHost(navController = navController, startDestination = Tab.Home.route) {
+    NavHost(navController = navController, startDestination = if (user.hasProfile) Tab.Profile.route else Tab.Home.route) {
         composable(Tab.Home.route) {
             Refreshable(isRefreshing, viewModel::refresh) {
                 HomeScreen(
@@ -263,7 +278,7 @@ private fun AppNavHost(
         }
         composable(Tab.Calendar.route) {
             Refreshable(isRefreshing, viewModel::refresh) {
-                CalendarScreen(viewModel = viewModel, onOpenEvent = navController::openEvent)
+                CalendarScreen(user = user, viewModel = viewModel, onOpenEvent = navController::openEvent)
             }
         }
         composable(Tab.Performance.route) {

@@ -52,6 +52,12 @@ data class MyProfile(
     val learningCount: Int get() = gradeForms.count { !it.known && it.learning != null }
 }
 
+data class PromotionNotification(
+    val id: Long,
+    val previousGrade: String,
+    val newGrade: String,
+)
+
 data class StudentInfo(
     val id: Long,
     val name: String,
@@ -141,10 +147,19 @@ data class CalendarEvent(
     val attendees: Attendees?,
     val full: Boolean,
     val myParticipation: MyParticipation?,
+    val description: String? = null,
 ) {
     val isRecurring: Boolean get() = recurringRuleId != null
     fun hasStarted(now: LocalDateTime): Boolean = !start.isAfter(now)
 }
+
+data class CancellationNotification(
+    val id: Long,
+    val courseName: String,
+    val start: LocalDateTime,
+    val end: LocalDateTime,
+    val roomName: String?,
+)
 
 data class Room(val id: Long, val name: String, val active: Boolean)
 
@@ -196,6 +211,7 @@ data class EventPayload(
     val startAt: LocalDateTime,
     val endAt: LocalDateTime,
     val settings: ParticipationSettings?,
+    val description: String? = null,
 )
 
 data class RulePayload(

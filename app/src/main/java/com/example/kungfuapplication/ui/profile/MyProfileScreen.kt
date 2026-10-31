@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.SportsMartialArts
 import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
@@ -68,6 +69,31 @@ fun MyProfileScreen(viewModel: AppViewModel) {
         if (state.error != null) ErrorState(state.error!!, onRetry = viewModel::reloadProfile)
         else LoadingState(message = "Cargando tu ficha…")
         return
+    }
+
+    state.promotionNotifications.firstOrNull()?.let { notification ->
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("¡Felicidades, ${profile.student.name}!") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Has ascendido de ${notification.previousGrade} a ${notification.newGrade}.")
+                    Text("¡Enhorabuena por este logro!")
+                    state.promotionNotificationError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.acknowledgePromotionNotification(notification.id) },
+                    enabled = notification.id !in state.acknowledgingPromotionIds,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (notification.id in state.acknowledgingPromotionIds) "Confirmando…" else "Confirmar recepción")
+                }
+            },
+        )
     }
 
     LazyColumn(

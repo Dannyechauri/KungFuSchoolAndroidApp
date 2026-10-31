@@ -115,12 +115,13 @@ fun checkEvent(
     courseId: Long?, instructorId: Long?, roomId: Long?,
     date: LocalDate, start: LocalTime, end: LocalTime,
     settings: ParticipationSettings?,
+    description: String? = null,
 ): FormCheck<EventPayload> {
     if (courseId == null || instructorId == null || roomId == null) {
         return FormCheck.Invalid("Selecciona un curso, un instructor y una sala activa.")
     }
     if (!end.isAfter(start)) return FormCheck.Invalid("El final debe ser posterior al inicio.")
-    return FormCheck.Valid(EventPayload(courseId, instructorId, roomId, LocalDateTime.of(date, start), LocalDateTime.of(date, end), settings))
+    return FormCheck.Valid(EventPayload(courseId, instructorId, roomId, LocalDateTime.of(date, start), LocalDateTime.of(date, end), settings, description))
 }
 
 fun checkRule(
@@ -214,6 +215,7 @@ private fun ScheduleForm(
     var unlimited by rememberSaveable { mutableStateOf(currentLimit == null) }
     var limitText by rememberSaveable { mutableStateOf(currentLimit?.toString().orEmpty()) }
     var showCount by rememberSaveable { mutableStateOf(event?.showAttendeeCount ?: rule?.showAttendeeCount ?: true) }
+    var description by rememberSaveable { mutableStateOf(event?.description.orEmpty()) }
     var validationError by remember { mutableStateOf<String?>(null) }
     var confirmCancel by remember { mutableStateOf(false) }
 
@@ -231,7 +233,7 @@ private fun ScheduleForm(
                 is FormCheck.Valid -> onSubmitRule(check.payload)
             }
         } else {
-            when (val check = checkEvent(courseId, instructorId, roomId, date, startTime, endTime, settings)) {
+            when (val check = checkEvent(courseId, instructorId, roomId, date, startTime, endTime, settings, description.trim().ifBlank { null })) {
                 is FormCheck.Invalid -> validationError = check.message
                 is FormCheck.Valid -> onSubmitEvent(check.payload)
             }
@@ -260,6 +262,20 @@ private fun ScheduleForm(
             if (courses.isEmpty()) ErrorText(if (target.isRule) "No hay clases habituales disponibles." else "No hay cursos disponibles.")
             if (instructors.isEmpty()) ErrorText("No hay instructores disponibles.")
             if (rooms.isEmpty()) ErrorText("No hay salas activas.")
+        }
+
+        if (!target.isRule) {
+            FormSection("Descripción de la sesión") {
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it.take(2000) },
+                    label = { Text("Descripción (opcional)") },
+                    minLines = 3,
+                    maxLines = 5,
+                    supportingText = { Text("${description.length}/2000") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
 
         FormSection(if (target.isRule) "Horario semanal" else "Fecha y hora") {

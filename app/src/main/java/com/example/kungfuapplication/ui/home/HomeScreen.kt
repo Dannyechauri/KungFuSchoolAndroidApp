@@ -95,7 +95,7 @@ fun HomeScreen(
             if (mine.isEmpty()) {
                 item { NoParticipationCard(onOpenCalendar) }
             } else {
-                dayGroupedItems(mine.take(MAX_ITEMS), today, onOpenEvent)
+                dayGroupedItems(mine.take(MAX_ITEMS), today, user.instructorId, onOpenEvent)
             }
         }
 
@@ -113,7 +113,7 @@ fun HomeScreen(
                 )
             }
         } else {
-            dayGroupedItems(school.take(if (user.isAdmin) MAX_ITEMS * 2 else MAX_ITEMS), today, onOpenEvent)
+            dayGroupedItems(school.take(if (user.isAdmin) MAX_ITEMS * 2 else MAX_ITEMS), today, user.instructorId, onOpenEvent)
         }
     }
 }
@@ -121,6 +121,7 @@ fun HomeScreen(
 private fun androidx.compose.foundation.lazy.LazyListScope.dayGroupedItems(
     events: List<CalendarEvent>,
     today: java.time.LocalDate,
+    instructorId: Long?,
     onOpenEvent: (Long) -> Unit,
 ) {
     events.groupBy { it.start.toLocalDate() }.forEach { (date, dayEvents) ->
@@ -133,7 +134,11 @@ private fun androidx.compose.foundation.lazy.LazyListScope.dayGroupedItems(
             )
         }
         items(dayEvents, key = { "home-${it.id}" }) { event ->
-            EventCard(event = event, onClick = { onOpenEvent(event.id) })
+            EventCard(
+                event = event,
+                onClick = { onOpenEvent(event.id) },
+                assignedToCurrentInstructor = instructorId != null && event.instructorId == instructorId,
+            )
         }
     }
 }

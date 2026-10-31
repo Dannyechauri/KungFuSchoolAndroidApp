@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -43,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.kungfuapplication.data.model.CalendarEvent
+import com.example.kungfuapplication.data.model.SessionUser
 import com.example.kungfuapplication.data.model.weekdayShortNames
 import com.example.kungfuapplication.ui.AppViewModel
 import com.example.kungfuapplication.ui.CalendarMode
@@ -54,13 +56,14 @@ import com.example.kungfuapplication.ui.components.EventCard
 import com.example.kungfuapplication.ui.components.LoadingState
 import com.example.kungfuapplication.ui.components.formatFullDay
 import com.example.kungfuapplication.ui.components.formatMonthShort
+import com.example.kungfuapplication.ui.components.formatTime
 import com.example.kungfuapplication.ui.components.relativeLabel
 import com.example.kungfuapplication.ui.schoolToday
 import com.example.kungfuapplication.ui.weekStart
 import java.time.LocalDate
 
 @Composable
-fun CalendarScreen(viewModel: AppViewModel, onOpenEvent: (Long) -> Unit) {
+fun CalendarScreen(user: SessionUser, viewModel: AppViewModel, onOpenEvent: (Long) -> Unit) {
     val state by viewModel.calendar.collectAsStateWithLifecycle()
 
     if (!state.loaded) {
@@ -93,13 +96,36 @@ fun CalendarScreen(viewModel: AppViewModel, onOpenEvent: (Long) -> Unit) {
         if (state.isLoading) {
             item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
         }
+        state.cancellationNotificationError?.let { error ->
+            item { Text("No se pudieron cargar los avisos: $error", color = MaterialTheme.colorScheme.error) }
+        }
+        items(state.cancellationNotifications, key = { "cancel-notice-${it.id}" }) { notification ->
+            androidx.compose.material3.ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Sesión cancelada", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.error)
+                    Text(notification.courseName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "${notification.start.toLocalDate().formatFullDay()} · ${notification.start.toLocalTime().formatTime()}–${notification.end.toLocalTime().formatTime()} · ${notification.roomName ?: "Sala sin asignar"}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Button(
+                        onClick = { viewModel.acknowledgeCancellationNotification(notification.id) },
+                        enabled = notification.id !in state.acknowledgingCancellationIds,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (notification.id in state.acknowledgingCancellationIds) "Confirmando…" else "Confirmar que la vi")
+                    }
+                }
+            }
+        }
         state.error?.let { error ->
             item { Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
         }
 
         when (state.mode) {
-            CalendarMode.WEEK -> weekContent(state, today, viewModel::selectDate, onOpenEvent)
-            CalendarMode.LIST -> listContent(state.visibleUpcoming, today, onOpenEvent)
+            CalendarMode.WEEK -> weekContent(state, today, user.instructorId, viewModel::selectDate, onOpenEvent)
+            CalendarMode.LIST -> listContent(state.visibleUpcoming, today, user.instructorId, onOpenEvent)
         }
     }
 }
@@ -119,6 +145,7 @@ private fun RoomFilter(state: CalendarUiState, onSelect: (Long?) -> Unit) {
 private fun LazyListScope.weekContent(
     state: CalendarUiState,
     today: LocalDate,
+    instructorId: Long?,
     onSelectDate: (LocalDate) -> Unit,
     onOpenEvent: (Long) -> Unit,
 ) {
@@ -179,7 +206,11 @@ private fun LazyListScope.weekContent(
         }
     } else {
         items(dayEvents, key = { "week-${it.id}" }) { event ->
-            EventCard(event = event, onClick = { onOpenEvent(event.id) })
+            EventCard(
+                event = event,
+                onClick = { onOpenEvent(event.id) },
+                assignedToCurrentInstructor = instructorId != null && event.instructorId == instructorId,
+            )
         }
     }
 }
@@ -220,7 +251,7 @@ private fun DayCell(
     }
 }
 
-private fun LazyListScope.listContent(events: List<CalendarEvent>, today: LocalDate, onOpenEvent: (Long) -> Unit) {
+private fun LazyListScope.listContent(events: List<CalendarEvent>, today: LocalDate, instructorId: Long?, onOpenEvent: (Long) -> Unit) {
     if (events.isEmpty()) {
         item {
             EmptyState(
@@ -241,7 +272,11 @@ private fun LazyListScope.listContent(events: List<CalendarEvent>, today: LocalD
             )
         }
         items(dayEvents, key = { "list-${it.id}" }) { event ->
-            EventCard(event = event, onClick = { onOpenEvent(event.id) })
+            EventCard(
+                event = event,
+                onClick = { onOpenEvent(event.id) },
+                assignedToCurrentInstructor = instructorId != null && event.instructorId == instructorId,
+            )
         }
     }
 }
