@@ -233,6 +233,7 @@ private fun ParticipationCard(
     val hasStarted = remember(event.start) { event.hasStarted(schoolNow()) }
     val editable = user.canParticipate && event.active && !hasStarted
     val mine = event.myParticipation
+    val isTitular = user.instructorId != null && event.instructorId == user.instructorId
     var scope by rememberSaveable(event.id) { mutableStateOf(ParticipationScope.OCCURRENCE) }
     var role by rememberSaveable(event.id) { mutableStateOf(ParticipationRole.ALUMNO) }
     val effectiveScope = if (event.isRecurring) scope else ParticipationScope.OCCURRENCE
@@ -284,7 +285,7 @@ private fun ParticipationCard(
                         onSelect = { scope = it },
                     )
                 }
-                if (user.canChooseInstructorRole) {
+                if (user.canChooseInstructorRole && !isTitular) {
                     ChoiceGroup(
                         title = "Participar como",
                         options = listOf(ParticipationRole.ALUMNO to "Alumno", ParticipationRole.INSTRUCTOR to "Instructor"),
@@ -294,11 +295,14 @@ private fun ParticipationCard(
                 }
                 Button(
                     onClick = { onJoin(effectiveScope, role) },
-                    enabled = !busy && !seatBlocked,
+                    enabled = !busy && !seatBlocked && !isTitular,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     else Text("Apuntarme")
+                }
+                if (isTitular) {
+                    Text("Eres el instructor titular de esta actividad, así que ya participas en ella.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (seatBlocked) {
                     Text("No quedan plazas de alumno en este día.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
