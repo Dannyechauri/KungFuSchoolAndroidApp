@@ -264,6 +264,10 @@ enum class RankingCategory(val apiKey: String, val label: String) {
 
 data class RankingEntry(val rank: Int, val studentId: Long, val name: String, val points: Int)
 
+enum class Medal(val label: String) { GOLD("Oro"), SILVER("Plata"), BRONZE("Bronce") }
+
+data class Achievement(val month: YearMonth, val category: RankingCategory, val medal: Medal, val points: Int)
+
 data class PerformanceRankings(val month: YearMonth, val categories: Map<RankingCategory, List<RankingEntry>>) {
     fun visibleEntries(category: RankingCategory, isAdmin: Boolean, expanded: Boolean): List<RankingEntry> {
         val entries = categories[category].orEmpty()

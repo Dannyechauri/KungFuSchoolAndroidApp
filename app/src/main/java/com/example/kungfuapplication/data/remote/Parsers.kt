@@ -1,6 +1,8 @@
 package com.example.kungfuapplication.data.remote
 
+import com.example.kungfuapplication.data.model.Achievement
 import com.example.kungfuapplication.data.model.Attendees
+import com.example.kungfuapplication.data.model.Medal
 import com.example.kungfuapplication.data.model.CalendarEvent
 import com.example.kungfuapplication.data.model.CancellationNotification
 import com.example.kungfuapplication.data.model.EventNotifications
@@ -354,6 +356,13 @@ fun parsePerformanceRankings(json: JsonObject) = PerformanceRankings(
             )
         }
     },
+)
+
+fun parseAchievement(json: JsonObject) = Achievement(
+    month = YearMonth.parse(json.str("month")),
+    category = RankingCategory.entries.first { it.apiKey == json.str("category") },
+    medal = Medal.valueOf(json.str("medal").orEmpty()),
+    points = json.int("points") ?: 0,
 )
 
 fun PerformancePayload.toJson(): JsonObject = buildJsonObject {

@@ -11,6 +11,7 @@ import com.example.kungfuapplication.data.model.EventNotifications
 import com.example.kungfuapplication.data.model.Course
 import com.example.kungfuapplication.data.model.EventPayload
 import com.example.kungfuapplication.data.model.InstructorOption
+import com.example.kungfuapplication.data.model.Achievement
 import com.example.kungfuapplication.data.model.MyProfile
 import com.example.kungfuapplication.data.model.Participant
 import com.example.kungfuapplication.data.model.ParticipationRole
@@ -89,6 +90,8 @@ data class ProfileUiState(
     val promotionNotifications: List<PromotionNotification> = emptyList(),
     val promotionNotificationError: String? = null,
     val acknowledgingPromotionIds: Set<Long> = emptySet(),
+    val achievements: List<Achievement>? = null,
+    val achievementsError: String? = null,
 )
 
 enum class CalendarMode { WEEK, LIST }
@@ -558,6 +561,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun reloadProfile() {
         viewModelScope.launch { loadProfile() }
+    }
+
+    fun loadAchievements() {
+        _profile.update { it.copy(achievements = null, achievementsError = null) }
+        viewModelScope.launch {
+            try {
+                val achievements = repository.achievements()
+                _profile.update { it.copy(achievements = achievements) }
+            } catch (e: Exception) {
+                val message = handleError(e) ?: return@launch
+                _profile.update { it.copy(achievementsError = message) }
+            }
+        }
     }
 
     fun saveFormProgress(formId: Long, percent: Int, formName: String) = formAction(formId) {

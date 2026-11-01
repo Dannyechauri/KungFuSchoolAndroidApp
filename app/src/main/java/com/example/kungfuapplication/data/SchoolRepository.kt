@@ -7,6 +7,7 @@ import com.example.kungfuapplication.data.model.Course
 import com.example.kungfuapplication.data.model.EventPayload
 import com.example.kungfuapplication.data.model.InstructorOption
 import com.example.kungfuapplication.data.model.JoinResult
+import com.example.kungfuapplication.data.model.Achievement
 import com.example.kungfuapplication.data.model.MyProfile
 import com.example.kungfuapplication.data.model.Participant
 import com.example.kungfuapplication.data.model.ParticipationRole
@@ -21,6 +22,7 @@ import com.example.kungfuapplication.data.model.PerformancePayload
 import com.example.kungfuapplication.data.remote.ApiClient
 import com.example.kungfuapplication.data.remote.ApiException
 import com.example.kungfuapplication.data.remote.asObject
+import com.example.kungfuapplication.data.remote.parseAchievement
 import com.example.kungfuapplication.data.remote.parseCourse
 import com.example.kungfuapplication.data.remote.parseEvent
 import com.example.kungfuapplication.data.remote.parseCancellationNotification
@@ -99,6 +101,8 @@ class SchoolRepository(
     // ---------- Mi ficha ----------
 
     suspend fun profile(): MyProfile = parseProfile(api.get("/api/me/profile").asObject())
+
+    suspend fun achievements(): List<Achievement> = api.getArray("/api/me/achievements").map(::parseAchievement)
 
     suspend fun cancellationNotifications(): List<CancellationNotification> =
         api.getArray("/api/calendar/cancellation-notifications").map(::parseCancellationNotification)

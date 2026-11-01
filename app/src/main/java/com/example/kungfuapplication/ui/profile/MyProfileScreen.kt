@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -32,19 +33,24 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.kungfuapplication.data.model.Achievement
 import com.example.kungfuapplication.data.model.FormState
 import com.example.kungfuapplication.data.model.GradeFormItem
 import com.example.kungfuapplication.data.model.KnownForm
+import com.example.kungfuapplication.data.model.Medal
 import com.example.kungfuapplication.data.model.MyProfile
 import com.example.kungfuapplication.data.model.state
 import com.example.kungfuapplication.ui.AppViewModel
@@ -58,6 +64,7 @@ import com.example.kungfuapplication.ui.components.SectionHeader
 import com.example.kungfuapplication.ui.components.StatusPill
 import com.example.kungfuapplication.ui.components.ageInYears
 import com.example.kungfuapplication.ui.components.formatLong
+import com.example.kungfuapplication.ui.components.formatMonthYear
 import kotlin.math.roundToInt
 
 @Composable
@@ -96,12 +103,27 @@ fun MyProfileScreen(viewModel: AppViewModel) {
         )
     }
 
+    var showAchievements by remember { mutableStateOf(false) }
+    if (showAchievements) {
+        AchievementsDialog(
+            achievements = state.achievements,
+            error = state.achievementsError,
+            onRetry = viewModel::loadAchievements,
+            onDismiss = { showAchievements = false },
+        )
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { ProfileHeader(profile) }
+        item {
+            ProfileHeader(profile, onOpenAchievements = {
+                viewModel.loadAchievements()
+                showAchievements = true
+            })
+        }
         item { PersonalData(profile) }
 
         item { SectionHeader("Formas de mi grado") }
@@ -149,16 +171,97 @@ fun MyProfileScreen(viewModel: AppViewModel) {
     }
 }
 
+private fun Medal.color(): Color = when (this) {
+    Medal.GOLD -> Color(0xFFE0A800)
+    Medal.SILVER -> Color(0xFFAEB4BB)
+    Medal.BRONZE -> Color(0xFFB8743A)
+}
+
+@Composable
+private fun AchievementsDialog(
+    achievements: List<Achievement>?,
+    error: String?,
+    onRetry: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Logros") },
+        text = {
+            when {
+                error != null -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(error, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = onRetry) { Text("Reintentar") }
+                }
+                achievements == null -> CircularProgressIndicator()
+                else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            Medal.entries.forEach { medal ->
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(achievements.count { it.medal == medal }.toString(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                                    Text(medal.label, style = MaterialTheme.typography.labelMedium, color = medal.color())
+                                }
+                            }
+                        }
+                    }
+                    if (achievements.isEmpty()) {
+                        item {
+                            Text(
+                                "Todavía no tienes medallas. Se otorgan al terminar cada mes a quienes logran más puntos en cada categoría.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    achievements.groupBy { it.month }.forEach { (month, monthAchievements) ->
+                        item(key = "month-$month") {
+                            Text(
+                                month.atDay(1).formatMonthYear(),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+                        items(monthAchievements, key = { "$month-${it.category}" }) { achievement ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(achievement.category.label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        if (achievement.points == 1) "1 punto" else "${achievement.points} puntos",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Text(achievement.medal.label, color = achievement.medal.color(), fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } },
+    )
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ProfileHeader(profile: MyProfile) {
+private fun ProfileHeader(profile: MyProfile, onOpenAchievements: () -> Unit) {
     val student = profile.student
     ElevatedCard(Modifier.fillMaxWidth()) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             InitialsAvatar(student.name, size = 64.dp)
             Spacer(Modifier.width(16.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(student.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.Top) {
+                    Text(student.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(8.dp))
+                    FilledTonalButton(
+                        onClick = onOpenAchievements,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                        modifier = Modifier.height(32.dp),
+                    ) { Text("Logros", style = MaterialTheme.typography.labelMedium) }
+                }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     BeltChip(profile.grade?.name, profile.grade?.beltColor)
                     if (student.isInstructor) StatusPill("Instructor", PillTone.Warning)
